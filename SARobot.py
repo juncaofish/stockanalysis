@@ -27,7 +27,7 @@ DIFclr = '#0066FF'
 VARclr = '#3300FF'
 EXP1clr = '#FF00FF'
 EXP2clr = '#3300CC'
-RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleWButtom']
+RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleWButtom',u'RuleGoldBar']
 
 def mkFolder():	
 	currentpath  = os.path.realpath(__file__)
@@ -157,6 +157,17 @@ def CalcDMA(Array, Short = 10, Long = 50):
 	DMACluster = {'DMA':DMA, 'AMA':AMA, 'DIF':DIF, 'INTEG':INTEG, 'DIFF':DIFF}
 	return DMACluster
 
+def RuleGoldBar(Prices, Volumes,_date):
+	RecentP = Prices[-5:]
+	RecentV = Volumes[-5:]
+	C0 = True#CheckDate(_date)
+	C1 = RecentP[4]>RecentP[3]>RecentP[2]>RecentP[1]
+	C2 = RecentV[4]<RecentV[3]<RecentV[2]<RecentV[1]
+	C3 = (RecentP[1]-RecentP[0])/RecentP[0]>0.09
+	Rule = False not in [C0,C1,C2,C3]
+	return Rule
+		
+	
 def RuleGoldCross(DIF, zeros, last_ndx, _date):
 	DIFF = CalcDiff(DIF)
 	C0 = CheckDate(_date)
@@ -164,9 +175,9 @@ def RuleGoldCross(DIF, zeros, last_ndx, _date):
 	C2 = sum(DIF[zeros[0]:zeros[1]])>0
 	C3 = sum(DIF[zeros[1]:zeros[2]])<0
 	C4 = sum(DIF[zeros[0]:zeros[2]])>0
-	C5 = last_ndx - zeros[2] < 4
+	C5 = last_ndx - zeros[2] < 3
 	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
-	C7 = (zeros[2] - zeros[1]) < 5
+	C7 = (zeros[2] - zeros[1]) < 4
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
 	return Rule
 	
@@ -193,7 +204,7 @@ def RuleGoldKiss(DIF, zero, last_ndx, _date):
 	C0 = CheckDate(_date)
 	C1 = DIF[last_ndx]>0
 	C2 = sum(DIF[zero:]) > 0
-	C3 = (last_ndx - zero)<5 and (last_ndx - DFZeros[-1])<5
+	C3 = (last_ndx - zero)<15 and (last_ndx - DFZeros[-1])<5
 	C4 = 0<DIF[DFZeros[-1]]<0.1
 	C5 = DIFF[zero] > 0
 	C6 = DIFF[DFZeros[-1]]>0
@@ -248,7 +259,12 @@ for num,id in enumerate(heart):
 		length = len(items)
 		idx = xrange(length)
 		emp = ['']*length
-
+		Open = GetColumn(items, 0)			
+		Close = GetColumn(items, 1)
+		High = GetColumn(items, 2)
+		Low = GetColumn(items, 3)
+		Volumes = GetColumn(items, 4)
+		Vol = NormVol(Volumes)
 		# plt.subplot(2, 1, 1)
 		# plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
 		# plt.plot(idx,MACluster['MA5'], M5clr ,MACluster['MA10'], M10clr ,MACluster['MA20'], M20clr ,MACluster['MA30'], M30clr ,DMACluster['DMA'], DMAclr, DMACluster['AMA'], AMAclr ,DMACluster['DIF'], DIFclr)
@@ -288,16 +304,11 @@ for num,id in enumerate(heart):
 		Cross = RuleGoldCross(DMACluster['DIF'], zero_ndx[-3:], idx[-1], datex[-1])
 		Kiss = RuleGoldKiss(DMACluster['DIF'], zero_ndx[-1], idx[-1], datex[-1])
 		WButtom = RuleGoldWButtom(DMACluster['DMA'], DMACluster['AMA'], zero_ndx[-1], idx[-1], datex[-1])
-		RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleWButtom']
-		for ndx,item in enumerate([Cross, Kiss, WButtom]):
+		GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
+		#RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleWButtom',u'RuleGoldBar']
+		for ndx,item in enumerate([Cross, Kiss, WButtom, GoldBar]):
 			if item:
-				RuleFolder = RuleFolders[ndx]
-
-				Open = GetColumn(items, 0)			
-				Close = GetColumn(items, 1)
-				High = GetColumn(items, 2)
-				Low = GetColumn(items, 3)
-				Vol = NormVol(GetColumn(items, 4))
+				RuleFolder = RuleFolders[ndx]				
 				Percent = RisingPercent(items)
 				Rise = map(sub, Close , Open)
 				rise_index = [i for i,per in enumerate(Rise) if per>=0]
