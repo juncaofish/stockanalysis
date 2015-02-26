@@ -27,7 +27,7 @@ DIFclr = '#0066FF'
 VARclr = '#3300FF'
 EXP1clr = '#FF00FF'
 EXP2clr = '#3300CC'
-RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleWButtom',u'RuleGoldBar']
+RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleGoldBar']
 
 def mkFolder():	
 	currentpath  = os.path.realpath(__file__)
@@ -158,11 +158,11 @@ def CalcDMA(Array, Short = 10, Long = 50):
 	return DMACluster
 
 def RuleGoldBar(Prices, Volumes,_date):
-	RecentP = Prices[-5:]
-	RecentV = Volumes[-5:]
+	RecentP = Prices[-4:]
+	RecentV = Volumes[-4:]
 	C0 = True#CheckDate(_date)
-	C1 = RecentP[4]>RecentP[3]>RecentP[2]>RecentP[1]
-	C2 = RecentV[4]<RecentV[3]<RecentV[2]<RecentV[1]
+	C1 = RecentP[3]>RecentP[2]>RecentP[1]
+	C2 = RecentV[3]<RecentV[2]<RecentV[1]
 	C3 = (RecentP[1]-RecentP[0])/RecentP[0]>0.09
 	Rule = False not in [C0,C1,C2,C3]
 	return Rule
@@ -303,10 +303,10 @@ for num,id in enumerate(heart):
 
 		Cross = RuleGoldCross(DMACluster['DIF'], zero_ndx[-3:], idx[-1], datex[-1])
 		Kiss = RuleGoldKiss(DMACluster['DIF'], zero_ndx[-1], idx[-1], datex[-1])
-		WButtom = RuleGoldWButtom(DMACluster['DMA'], DMACluster['AMA'], zero_ndx[-1], idx[-1], datex[-1])
+		#WButtom = RuleGoldWButtom(DMACluster['DMA'], DMACluster['AMA'], zero_ndx[-1], idx[-1], datex[-1])
 		GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
 		#RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleWButtom',u'RuleGoldBar']
-		for ndx,item in enumerate([Cross, Kiss, WButtom, GoldBar]):
+		for ndx,item in enumerate([Cross, Kiss, GoldBar]):
 			if item:
 				RuleFolder = RuleFolders[ndx]				
 				Percent = RisingPercent(items)
