@@ -41,10 +41,9 @@ def mkFolder():
 		if not os.path.exists(subfolder):
 			os.mkdir(subfolder)
 	return folderpath,folder
-	
-API_KEY = "pdaXjHTgQJ9s5sZRdfi93BMTz4CjICGl"
 
 def pushStocks(list, title):
+	API_KEY = "pdaXjHTgQJ9s5sZRdfi93BMTz4CjICGl"
 	try:
 		api = pb.PushBullet(API_KEY)
 		device = api['LGE Nexus 4']
@@ -160,13 +159,12 @@ def CalcDMA(Array, Short = 10, Long = 50):
 def RuleGoldBar(Prices, Volumes,_date):
 	RecentP = Prices[-4:]
 	RecentV = Volumes[-4:]
-	C0 = True#CheckDate(_date)
+	C0 = CheckDate(_date)
 	C1 = RecentP[3]>RecentP[2]>RecentP[1]
 	C2 = RecentV[3]<RecentV[2]<RecentV[1]
 	C3 = (RecentP[1]-RecentP[0])/RecentP[0]>0.09
 	Rule = False not in [C0,C1,C2,C3]
 	return Rule
-		
 	
 def RuleGoldCross(DIF, zeros, last_ndx, _date):
 	DIFF = CalcDiff(DIF)
@@ -177,7 +175,7 @@ def RuleGoldCross(DIF, zeros, last_ndx, _date):
 	C4 = sum(DIF[zeros[0]:zeros[2]])>0
 	C5 = last_ndx - zeros[2] < 3
 	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
-	C7 = (zeros[2] - zeros[1]) < 4
+	C7 = (zeros[2] - zeros[1]) < 6
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
 	return Rule
 	
@@ -198,16 +196,16 @@ def RuleGoldWButtom(DMA, AMA, zero, last_ndx, _date):
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
 	return Rule		
 	
-def RuleGoldKiss(DIF, zero, last_ndx, _date):
+def RuleGoldKiss(DIF, zero, Close, last_ndx, _date):
 	DIFF = CalcDiff(DIF)
-	DFZeros = FindZero(DIFF)	
+	DFZeros = FindZero(DIFF)
 	C0 = CheckDate(_date)
-	C1 = DIF[last_ndx]>0
-	C2 = sum(DIF[zero:]) > 0
-	C3 = (last_ndx - zero)<15 and (last_ndx - DFZeros[-1])<5
-	C4 = 0<DIF[DFZeros[-1]]<0.1
+	C1 = 0<DIF[last_ndx]<0.015*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
+	C2 = 0<DIF[DFZeros[-1]]<0.01*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
+	C3 = sum(DIF[zero:]) > 0
+	C4 = (last_ndx - zero)<30 and (last_ndx - DFZeros[-1])<5 # Last DMA Cross day within 6 weeks, Kiss day within 1 week
 	C5 = DIFF[zero] > 0
-	C6 = DIFF[DFZeros[-1]]>0
+	C6 = DIFF[last_ndx-1]>0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6]
 	return Rule	
 
@@ -218,31 +216,16 @@ def RuleEXPMA(List, last_ndx, _date):
 	C0 = CheckDate(_date)
 	C1 = DIFEXP[last_ndx]>0
 	C2 = (last_ndx - EXPZeros[-1])<5
-
 	Rule = False not in [C0,C1,C2]
-	return Rule	
-	
-def RuleGoldKissD(DIF, zero, last_ndx, _date):
-	DIFF = CalcDiff(DIF)
-	DFZeros = FindZero(DIFF)	
-	C0 = CheckDate(_date)
-	C1 = DIF[last_ndx]<0
-	C2 = sum(DIF[zero:]) < 0
-	C3 = (last_ndx - zero)<5
-	C4 = (last_ndx - DFZeros[-1])<5
-	C5 = 0<DIF[DFZeros[-1]]<0.1
-	C6 = DIFF[zero] < 0
-	C7 = DIFF[DFZeros[-1]]>0
-	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
-	return Rule		
+	return Rule
 
 def RuleTest():
 	return True
 
 heart = GetStockList()
-start = datetime.now()
 # heart = ['600240','000952','600546','000801','600193','002440','600123','000568','000525','000532','600089','600120','600280','000767','600638','600352','600112','600614','002375','002064']
 Result = []
+start = datetime.now()
 baseFolder, folder = mkFolder()
 for num,id in enumerate(heart):
 	temp = datetime.now()		
@@ -299,13 +282,11 @@ for num,id in enumerate(heart):
 		# #
 		# ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
 		# ax.legend( ('M5', 'M10', 'M20', 'M30'))
-		# UseRule = RuleEXPMA(MACluster['MA1'], idx[-1], datex[-1])
 
 		Cross = RuleGoldCross(DMACluster['DIF'], zero_ndx[-3:], idx[-1], datex[-1])
-		Kiss = RuleGoldKiss(DMACluster['DIF'], zero_ndx[-1], idx[-1], datex[-1])
+		Kiss = RuleGoldKiss(DMACluster['DIF'], zero_ndx[-1], Close, idx[-1], datex[-1])		
 		#WButtom = RuleGoldWButtom(DMACluster['DMA'], DMACluster['AMA'], zero_ndx[-1], idx[-1], datex[-1])
 		GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
-		#RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleWButtom',u'RuleGoldBar']
 		for ndx,item in enumerate([Cross, Kiss, GoldBar]):
 			if item:
 				RuleFolder = RuleFolders[ndx]				
@@ -315,7 +296,7 @@ for num,id in enumerate(heart):
 				fall_index = [i for i,per in enumerate(Rise) if per<0]
 				ExpMA1, ExpMA2 = CalExpMA(Close)
 				step = 5
-				
+				lookback = 20
 				plt.subplot(3, 1, 1)			
 				plt.plot(idx,MACluster['MA5'], M5clr ,MACluster['MA10'], M10clr ,MACluster['MA20'], M20clr ,MACluster['MA30'], M30clr , ExpMA1, EXP1clr , ExpMA2, EXP2clr)
 				plt.title(stockname, fontproperties=font)			
@@ -325,7 +306,7 @@ for num,id in enumerate(heart):
 				ax = plt.gca()		
 				ax.autoscale(enable=True, axis='both', tight=True)
 				ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
-				ax.set_xlim([idx[-1]-100 if idx[-1]>100 else idx[0],idx[-1]])				
+				ax.set_xlim([idx[-1]-lookback if idx[-1]>lookback else idx[0],idx[-1]])				
 				
 				plt.subplot(3, 1, 2)
 				plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
@@ -339,7 +320,8 @@ for num,id in enumerate(heart):
 				ax = plt.gca()
 				ax.autoscale(enable=True, axis='both', tight=True)			
 				ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
-				ax.set_xlim([idx[-1]-100 if idx[-1]>100 else idx[0],idx[-1]])				
+				ax.set_xlim([idx[-1]-lookback if idx[-1]>lookback else idx[0],idx[-1]])				
+				ax.set_ylim(min(DMACluster['DMA'][idx[-1]-lookback if idx[-1]>lookback else idx[0]:]),max(DMACluster['DMA'][idx[-1]-lookback if idx[-1]>lookback else idx[0]:]))
 				
 				plt.subplot(3, 1, 3)
 				plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r',align="center")
@@ -349,15 +331,15 @@ for num,id in enumerate(heart):
 				ax = plt.gca()	
 				ax.autoscale(enable=True, axis='both', tight=True)
 				ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
-				ax.set_xlim([idx[-1]-100 if idx[-1]>100 else idx[0],idx[-1]])				
+				ax.set_xlim([idx[-1]-lookback if idx[-1]>lookback else idx[0],idx[-1]])				
 				# plt.show()
 				goldstock = '%s - %s - %s'%(stockname,stockid,RuleFolder)
 				Result.append(goldstock)
 
 				try:
-					plt.savefig('%s/%s/%s Gold%s.png'%(baseFolder,RuleFolder,stockname+stockid,datex[zero_ndx[-1]]), dpi=450)
+					plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname,datex[zero_ndx[-1]]), dpi=200)
 				except:
-					plt.savefig('%s/%s/%s Gold%s.png'%(baseFolder,RuleFolder,stockname[1:]+stockid,datex[zero_ndx[-1]]), dpi=450)
+					plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname[1:],datex[zero_ndx[-1]]), dpi=200)
 				plt.clf()
 			
 		print 'Complete %s: %s - %s, Elapsed Time: %s'%(num, stockname,stockid,temp-start)		
@@ -366,6 +348,4 @@ for num,id in enumerate(heart):
 
 pushStocks(Result,folder)
 # if __name__ == '__main__':
-	# GoldSeeker(0)
-			
 			
