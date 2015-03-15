@@ -147,14 +147,14 @@ def CalcMA(Array):
 	MACluster = {'MA1':MA1, 'MA5':MA5, 'MA10':MA10, 'MA20':MA20, 'MA30':MA30, 'VAR':VAR}
 	return MACluster
 
-def CalcDMA(Array, Short = 10, Long = 50):
+def CalcDMA(Array, Short = 5, Long = 89, Middle = 34):
 	DMA = map(sub, MovingAverage(Array, 1, Short) , MovingAverage(Array, 1, Long))
-	AMA = MovingAverage(DMA, 0, Short)
+	AMA = MovingAverage(DMA, 0, Middle)
 	DIF = map(sub, DMA , AMA)
-	INTEG = CalcInteg(DIF)
-	DIFF = CalcDiff(DIF)
-	DMACluster = {'DMA':DMA, 'AMA':AMA, 'DIF':DIF, 'INTEG':INTEG, 'DIFF':DIFF}
-	return DMACluster
+	# INTEG = CalcInteg(DIF)
+	# DIFF = CalcDiff(DIF)
+	# DMACluster = {'DMA':DMA, 'AMA':AMA, 'DIF':DIF}
+	return DMA, AMA, DIF
 
 def RuleGoldBar(Prices, Volumes,_date):
 	RecentP = Prices[-4:]
@@ -166,8 +166,10 @@ def RuleGoldBar(Prices, Volumes,_date):
 	Rule = False not in [C0,C1,C2,C3]
 	return Rule
 	
-def RuleGoldCross(DIF, zeros, last_ndx, _date):
+def RuleGoldCross(DMA, AMA, zeros, last_ndx, _date):
+	DIF = map(sub, DMA , AMA)
 	DIFF = CalcDiff(DIF)
+	AMADIFF = CalcDiff(AMA)
 	C0 = CheckDate(_date)
 	C1 = DIF[last_ndx]>0
 	C2 = sum(DIF[zeros[0]:zeros[1]])>0
@@ -176,7 +178,8 @@ def RuleGoldCross(DIF, zeros, last_ndx, _date):
 	C5 = last_ndx - zeros[2] < 3
 	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
 	C7 = (zeros[2] - zeros[1]) < 6
-	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
+	C8 = AMADIFF[last_ndx] >= 0
+	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]
 	return Rule
 	
 def RuleGoldWButtom(DMA, AMA, zero, last_ndx, _date):	
@@ -196,8 +199,10 @@ def RuleGoldWButtom(DMA, AMA, zero, last_ndx, _date):
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
 	return Rule		
 	
-def RuleGoldKiss(DIF, zero, Close, last_ndx, _date):
+def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date):
+	DIF = map(sub, DMA , AMA)
 	DIFF = CalcDiff(DIF)
+	AMADIFF = CalcDiff(AMA)
 	DFZeros = FindZero(DIFF)
 	C0 = CheckDate(_date)
 	C1 = 0<DIF[last_ndx]<0.015*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
@@ -205,8 +210,9 @@ def RuleGoldKiss(DIF, zero, Close, last_ndx, _date):
 	C3 = sum(DIF[zero:]) > 0
 	C4 = (last_ndx - zero)<30 and (last_ndx - DFZeros[-1])<5 # Last DMA Cross day within 6 weeks, Kiss day within 1 week
 	C5 = DIFF[zero] > 0
-	C6 = DIFF[last_ndx-1]>0
-	Rule = False not in [C0,C1,C2,C3,C4,C5,C6]
+	C6 = DIFF[last_ndx-1]>=0
+	C7 = AMADIFF[last_ndx] >= 0
+	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
 	return Rule	
 
 def RuleEXPMA(List, last_ndx, _date):
@@ -234,11 +240,11 @@ for num,id in enumerate(heart):
 		items = StockGrab(stockid)		
 		datex = GetColumn(items, 5)		
 		MACluster = CalcMA(items)		
-		DMACluster = CalcDMA(items)				
-		zero_ndx = FindZero(DMACluster['DIF'])
-		small_ndx = FindZero(DMACluster['DIF'])
-		zero_pts = GetPart(zero_ndx, DMACluster['DIF'])
-		small_pts = GetPart(small_ndx, DMACluster['DIF'])	
+		[DMA, AMA, DIF] = CalcDMA(items)		
+		zero_ndx = FindZero(DIF)
+		# small_ndx = FindZero(DMACluster['DIF'])
+		zero_pts = GetPart(zero_ndx, DIF)
+		# small_pts = GetPart(small_ndx, DMACluster['DIF'])	
 		length = len(items)
 		idx = xrange(length)
 		emp = ['']*length
@@ -283,9 +289,8 @@ for num,id in enumerate(heart):
 		# ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
 		# ax.legend( ('M5', 'M10', 'M20', 'M30'))
 
-		Cross = RuleGoldCross(DMACluster['DIF'], zero_ndx[-3:], idx[-1], datex[-1])
-		Kiss = RuleGoldKiss(DMACluster['DIF'], zero_ndx[-1], Close, idx[-1], datex[-1])		
-		#WButtom = RuleGoldWButtom(DMACluster['DMA'], DMACluster['AMA'], zero_ndx[-1], idx[-1], datex[-1])
+		Cross = RuleGoldCross(DMA, AMA, zero_ndx[-3:], idx[-1], datex[-1])
+		Kiss = RuleGoldKiss(DMA, AMA, zero_ndx[-1], Close, idx[-1], datex[-1])		
 		GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
 		for ndx,item in enumerate([Cross, Kiss, GoldBar]):
 			if item:
@@ -310,18 +315,18 @@ for num,id in enumerate(heart):
 				
 				plt.subplot(3, 1, 2)
 				plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
-				plt.plot(idx,DMACluster['DMA'], DMAclr, DMACluster['AMA'], AMAclr ,DMACluster['DIF'], DIFclr)
-				plt.plot(idx, DMACluster['DIFF'],'g')
+				plt.plot(idx,DMA, DMAclr, AMA, AMAclr ,DIF, DIFclr)
+				#plt.plot(idx, DMACluster['DIFF'],'g')
 				#plt.plot(idx, CalcDiff(DMACluster['DIFF']),'k')
 				plt.plot(zero_ndx[-3:], zero_pts[-3:], 'ro')
-				plt.plot(small_ndx[-3:], small_pts[-3:],'g*')			
+				# plt.plot(small_ndx[-3:], small_pts[-3:],'g*')			
 				#plt.xticks(np.arange(len(idx))[0::step], emp[0::step])		
 				plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)				
 				ax = plt.gca()
 				ax.autoscale(enable=True, axis='both', tight=True)			
 				ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
 				ax.set_xlim([idx[-1]-lookback if idx[-1]>lookback else idx[0],idx[-1]])				
-				ax.set_ylim(min(DMACluster['DMA'][idx[-1]-lookback if idx[-1]>lookback else idx[0]:]),max(DMACluster['DMA'][idx[-1]-lookback if idx[-1]>lookback else idx[0]:]))
+				ax.set_ylim(min(DMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:]),max(DMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:]))
 				
 				plt.subplot(3, 1, 3)
 				plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r',align="center")
@@ -333,7 +338,7 @@ for num,id in enumerate(heart):
 				ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
 				ax.set_xlim([idx[-1]-lookback if idx[-1]>lookback else idx[0],idx[-1]])				
 				# plt.show()
-				goldstock = '%s - %s - %s'%(stockname,stockid,RuleFolder)
+				goldstock = '%s - %s - %s'%(stockname,stockid,RuleFolder[4:])
 				Result.append(goldstock)
 
 				try:
