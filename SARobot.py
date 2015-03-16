@@ -90,7 +90,7 @@ def MovingAverage(Array, idx, width):
 	if type(Array[0]) == type([]):
 		return [sum([itemgetter(idx)(elem) for elem in Array[i-width+1:i+1]])/float(width) if i >= width-1 else Array[i][idx] for i in xrange(length)]
 	else: 
-		return [sum([elem for elem in Array[i-width+1:i+1]])/float(width) if i >= width-1 else Array[i] for i in xrange(length)]
+		return [sum( Array[i-width+1:i+1] if i >= width-1 else (Array[0:i]+[Array[i]]*(width-i)))/float(width) for i in xrange(length)]
 	
 def CalExpMA(List):
 	length = len(List)
@@ -151,8 +151,6 @@ def CalcDMA(Array, Short = 5, Long = 89, Middle = 34):
 	DMA = map(sub, MovingAverage(Array, 1, Short) , MovingAverage(Array, 1, Long))
 	AMA = MovingAverage(DMA, 0, Middle)
 	DIF = map(sub, DMA , AMA)
-	# INTEG = CalcInteg(DIF)
-	# DIFF = CalcDiff(DIF)
 	# DMACluster = {'DMA':DMA, 'AMA':AMA, 'DIF':DIF}
 	return DMA, AMA, DIF
 
@@ -177,7 +175,7 @@ def RuleGoldCross(DMA, AMA, zeros, last_ndx, _date):
 	C4 = sum(DIF[zeros[0]:zeros[2]])>0
 	C5 = last_ndx - zeros[2] < 3
 	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
-	C7 = (zeros[2] - zeros[1]) < 6
+	C7 = (zeros[2] - zeros[1]) < 5
 	C8 = AMADIFF[last_ndx] >= 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]
 	return Rule
@@ -200,7 +198,7 @@ def RuleGoldWButtom(DMA, AMA, zero, last_ndx, _date):
 	return Rule		
 	
 def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date):
-	DIF = map(sub, DMA , AMA)
+	DIF = map(sub, DMA , AMA)	
 	DIFF = CalcDiff(DIF)
 	AMADIFF = CalcDiff(AMA)
 	DFZeros = FindZero(DIFF)
@@ -208,9 +206,9 @@ def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date):
 	C1 = 0<DIF[last_ndx]<0.015*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
 	C2 = 0<DIF[DFZeros[-1]]<0.01*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
 	C3 = sum(DIF[zero:]) > 0
-	C4 = (last_ndx - zero)<30 and (last_ndx - DFZeros[-1])<5 # Last DMA Cross day within 6 weeks, Kiss day within 1 week
+	C4 = (last_ndx - zero)<34 and (last_ndx - DFZeros[-1])<5 # Last DMA Cross day within 6 weeks, Kiss day within 1 week
 	C5 = DIFF[zero] > 0
-	C6 = DIFF[last_ndx-1]>=0
+	C6 = DIFF[last_ndx]>=0
 	C7 = AMADIFF[last_ndx] >= 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
 	return Rule	
@@ -224,12 +222,21 @@ def RuleEXPMA(List, last_ndx, _date):
 	C2 = (last_ndx - EXPZeros[-1])<5
 	Rule = False not in [C0,C1,C2]
 	return Rule
-
+	
+def CalcBoll(Close,N=89, k=2):
+	length = len(Close)
+	MA = MovingAverage(Close,0,N)
+	MB = MovingAverage(Close,0,N-1)
+	SM = map(lambda x,y:(x-y)**2, Close, MA)
+	MD = [(sum(SM[i-N+2:i+1])/float(N))**0.5 if i >= N-1 else 0 for i in xrange(length)]
+	UP = map(lambda x,y:x+y*k, MB, MD)
+	DN = map(lambda x,y:x-y*k, MB, MD)
+	return MB, UP, DN
+	
 def RuleTest():
 	return True
 
 heart = GetStockList()
-# heart = ['600240','000952','600546','000801','600193','002440','600123','000568','000525','000532','600089','600120','600280','000767','600638','600352','600112','600614','002375','002064']
 Result = []
 start = datetime.now()
 baseFolder, folder = mkFolder()
@@ -242,9 +249,7 @@ for num,id in enumerate(heart):
 		MACluster = CalcMA(items)		
 		[DMA, AMA, DIF] = CalcDMA(items)		
 		zero_ndx = FindZero(DIF)
-		# small_ndx = FindZero(DMACluster['DIF'])
 		zero_pts = GetPart(zero_ndx, DIF)
-		# small_pts = GetPart(small_ndx, DMACluster['DIF'])	
 		length = len(items)
 		idx = xrange(length)
 		emp = ['']*length
@@ -254,6 +259,7 @@ for num,id in enumerate(heart):
 		Low = GetColumn(items, 3)
 		Volumes = GetColumn(items, 4)
 		Vol = NormVol(Volumes)
+		MB,UP,DN = CalcBoll(Close)
 		# plt.subplot(2, 1, 1)
 		# plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
 		# plt.plot(idx,MACluster['MA5'], M5clr ,MACluster['MA10'], M10clr ,MACluster['MA20'], M20clr ,MACluster['MA30'], M30clr ,DMACluster['DMA'], DMAclr, DMACluster['AMA'], AMAclr ,DMACluster['DIF'], DIFclr)
@@ -301,17 +307,21 @@ for num,id in enumerate(heart):
 				fall_index = [i for i,per in enumerate(Rise) if per<0]
 				ExpMA1, ExpMA2 = CalExpMA(Close)
 				step = 5
-				lookback = 20
+				lookback = 55
 				plt.subplot(3, 1, 1)			
-				plt.plot(idx,MACluster['MA5'], M5clr ,MACluster['MA10'], M10clr ,MACluster['MA20'], M20clr ,MACluster['MA30'], M30clr , ExpMA1, EXP1clr , ExpMA2, EXP2clr)
+				plt.plot(idx,MB, 'b' ,UP, 'r',DN,'g')
+				plt.title(stockname, fontproperties=font)	
+				
+				# plt.subplot(3, 1, 1)			
+				# plt.plot(idx,MACluster['MA5'], M5clr ,MACluster['MA10'], M10clr ,MACluster['MA20'], M20clr ,MACluster['MA30'], M30clr , ExpMA1, EXP1clr , ExpMA2, EXP2clr)
 				plt.title(stockname, fontproperties=font)			
 				plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)
-				#plt.xticks(np.arange(len(idx))[0::step],emp[0::step])			
-				#plt.legend( ('M5', 'M10', 'M20', 'M30'))
+				# plt.xticks(np.arange(len(idx))[0::step],emp[0::step])			
+				# plt.legend( ('M5', 'M10', 'M20', 'M30'))
 				ax = plt.gca()		
 				ax.autoscale(enable=True, axis='both', tight=True)
-				ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
-				ax.set_xlim([idx[-1]-lookback if idx[-1]>lookback else idx[0],idx[-1]])				
+				# ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
+				# ax.set_xlim([idx[-1]-lookback if idx[-1]>lookback else idx[0],idx[-1]])				
 				
 				plt.subplot(3, 1, 2)
 				plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
@@ -326,7 +336,12 @@ for num,id in enumerate(heart):
 				ax.autoscale(enable=True, axis='both', tight=True)			
 				ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
 				ax.set_xlim([idx[-1]-lookback if idx[-1]>lookback else idx[0],idx[-1]])				
-				ax.set_ylim(min(DMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:]),max(DMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:]))
+				ax.set_ylim(min(DIF[idx[-1]-lookback if idx[-1]>lookback else idx[0]:] + \
+				AMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:] + \
+				DMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:]),\
+				max(DIF[idx[-1]-lookback if idx[-1]>lookback else idx[0]:] + \
+				AMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:]+\
+				DMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:]))
 				
 				plt.subplot(3, 1, 3)
 				plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r',align="center")
