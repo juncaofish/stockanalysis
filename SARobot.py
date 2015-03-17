@@ -92,13 +92,13 @@ def MovingAverage(Array, idx, width):
 	else: 
 		return [sum( Array[i-width+1:i+1] if i >= width-1 else (Array[0:i]+[Array[i]]*(width-i)))/float(width) for i in xrange(length)]
 	
-def CalExpMA(List):
+def CalcExpMA(List, Period):
 	length = len(List)
 	def ExpMA(List, n, N):
 		return List[0] if n == 0 else (List[n]*2.0 + (N - 1.0)*ExpMA(List, n-1,N))/( N +1.0)
-	ExpMA1 = [ExpMA(List,i,10) for i in xrange(length)]
-	ExpMA2 = [ExpMA(List,i,50) for i in xrange(length)]
-	return ExpMA1, ExpMA2
+	ExpMA = [ExpMA(List,i,Period) for i in xrange(length)]
+	# ExpMA2 = [ExpMA(List,i,50) for i in xrange(length)]
+	return ExpMA
 		
 def RisingPercent(Array):
 	length = len(Array)
@@ -175,7 +175,7 @@ def RuleGoldCross(DMA, AMA, zeros, last_ndx, _date):
 	C4 = sum(DIF[zeros[0]:zeros[2]])>0
 	C5 = last_ndx - zeros[2] < 3
 	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
-	C7 = (zeros[2] - zeros[1]) < 5
+	C7 = (zeros[2] - zeros[1]) < 4
 	C8 = AMADIFF[last_ndx] >= 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]
 	return Rule
@@ -206,7 +206,7 @@ def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date):
 	C1 = 0<DIF[last_ndx]<0.015*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
 	C2 = 0<DIF[DFZeros[-1]]<0.01*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
 	C3 = sum(DIF[zero:]) > 0
-	C4 = (last_ndx - zero)<34 and (last_ndx - DFZeros[-1])<5 # Last DMA Cross day within 6 weeks, Kiss day within 1 week
+	C4 = 10<(last_ndx - zero)<45 and (last_ndx - DFZeros[-1])<4 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
 	C5 = DIFF[zero] > 0
 	C6 = DIFF[last_ndx]>=0
 	C7 = AMADIFF[last_ndx] >= 0
@@ -214,7 +214,8 @@ def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date):
 	return Rule	
 
 def RuleEXPMA(List, last_ndx, _date):
-	EXP1, EXP2 = CalExpMA(List)
+	EXP1 = CalcExpMA(List,10)
+	EXP2 = CalcExpMA(List,50)
 	DIFEXP = map(sub, EXP1, EXP2)
 	EXPZeros = FindZero(DIFEXP)	
 	C0 = CheckDate(_date)
@@ -224,14 +225,23 @@ def RuleEXPMA(List, last_ndx, _date):
 	return Rule
 	
 def CalcBoll(Close,N=89, k=2):
+# Bollinger Bands consist of:
+# an N-period moving average (MA)
+# an upper band at K times an N-period standard deviation above the moving average (MA + Kσ)
+# a lower band at K times an N-period standard deviation below the moving average (MA − Kσ)
+# %b = (last − lowerBB) / (upperBB − lowerBB)
+# Bandwidth tells how wide the Bollinger Bands are on a normalized basis. Writing the same symbols as before, and middleBB for the moving average, or middle Bollinger Band:
+# Bandwidth = (upperBB − lowerBB) / middleBB
 	length = len(Close)
 	MA = MovingAverage(Close,0,N)
-	MB = MovingAverage(Close,0,N-1)
+	# MA = CalcExpMA(Close, N)
 	SM = map(lambda x,y:(x-y)**2, Close, MA)
-	MD = [(sum(SM[i-N+2:i+1])/float(N))**0.5 if i >= N-1 else 0 for i in xrange(length)]
-	UP = map(lambda x,y:x+y*k, MB, MD)
-	DN = map(lambda x,y:x-y*k, MB, MD)
-	return MB, UP, DN
+	MD = [(sum(SM[i-N+1:i+1] if i >= N-1 else (SM[0:i]+[SM[i]]*(N-i)))/float(N))**0.5 for i in xrange(length)]
+	UP = map(lambda x,y:x+y*k, MA, MD)
+	DN = map(lambda x,y:x-y*k, MA, MD)
+	b = map(lambda x,y,z:(x-z)/(float(y-z) if y!=z else 1.0), Close, UP, DN)
+	Band = map(lambda x,y,z:(x-z)/(float(y) if y!=0 else 1.0), UP, MD, DN)
+	return MA, UP, DN, b, Band
 	
 def RuleTest():
 	return True
@@ -259,7 +269,7 @@ for num,id in enumerate(heart):
 		Low = GetColumn(items, 3)
 		Volumes = GetColumn(items, 4)
 		Vol = NormVol(Volumes)
-		MB,UP,DN = CalcBoll(Close)
+		MA, UP, DN, b, Band = CalcBoll(Close)
 		# plt.subplot(2, 1, 1)
 		# plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
 		# plt.plot(idx,MACluster['MA5'], M5clr ,MACluster['MA10'], M10clr ,MACluster['MA20'], M20clr ,MACluster['MA30'], M30clr ,DMACluster['DMA'], DMAclr, DMACluster['AMA'], AMAclr ,DMACluster['DIF'], DIFclr)
@@ -305,11 +315,20 @@ for num,id in enumerate(heart):
 				Rise = map(sub, Close , Open)
 				rise_index = [i for i,per in enumerate(Rise) if per>=0]
 				fall_index = [i for i,per in enumerate(Rise) if per<0]
-				ExpMA1, ExpMA2 = CalExpMA(Close)
+				# ExpMA1 = CalcExpMA(Close, 10)
+				# ExpMA2 = CalcExpMA(Close, 50)
 				step = 5
 				lookback = 55
 				plt.subplot(3, 1, 1)			
-				plt.plot(idx,MB, 'b' ,UP, 'r',DN,'g')
+				plt.plot(idx,MA, 'b' ,UP, 'r',DN,'g')
+				
+				# Draw K-fig and Vol-fig
+				rise_index = [i for i,per in enumerate(Rise) if per>=0]
+				fall_index = [i for i,per in enumerate(Rise) if per<0]
+				plt.vlines(rise_index, GetPart(rise_index,Low), GetPart(rise_index,High), edgecolor='red', linewidth=1, label='_nolegend_') 
+				plt.vlines(rise_index, GetPart(rise_index,Open), GetPart(rise_index,Close), edgecolor='red', linewidth=4, label='_nolegend_')
+				plt.vlines(fall_index, GetPart(fall_index,Low), GetPart(fall_index,High), edgecolor='green', linewidth=1, label='_nolegend_') 
+				plt.vlines(fall_index, GetPart(fall_index,Open), GetPart(fall_index,Close), edgecolor='green', linewidth=4, label='_nolegend_')	
 				plt.title(stockname, fontproperties=font)	
 				
 				# plt.subplot(3, 1, 1)			
