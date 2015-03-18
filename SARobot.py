@@ -12,23 +12,6 @@ from operator import itemgetter, div, sub
 from StockList import stock
 import pushybullet as pb
 
-font = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=14) 
-Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
-url = 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=%s&end_date=%s&begin_date=%s' 
-# 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=sz002440&end_date=20150131&begin_date=20141201'
-
-M5clr  = '#0000CC'
-M10clr = '#FFCC00'
-M20clr = '#CC6699'
-M30clr = '#009966'
-DMAclr = '#000000'
-AMAclr = '#FF0033'
-DIFclr = '#0066FF'
-VARclr = '#3300FF'
-EXP1clr = '#FF00FF'
-EXP2clr = '#3300CC'
-RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleGoldBar']
-
 def mkFolder():	
 	currentpath  = os.path.realpath(__file__)
 	basedir = os.path.dirname(currentpath)
@@ -58,12 +41,21 @@ def pushStocks(list, title):
 def CheckDate(_date):
 	today = date.today()
 	yesterday = today - timedelta(days=1)
-	return _date in [today.strftime('%Y-%m-%d'),yesterday.strftime('%Y-%m-%d')]
+	flag = _date in [today.strftime('%Y-%m-%d'),yesterday.strftime('%Y-%m-%d')]
+	return flag
+
+def ConvStrToDate(_str):
+	ymd = time.strptime(_str,'%Y%m%d')
+	current = date(*ymd[0:3])
+	tommorrow = current + timedelta(days=1)
+	return tommorrow
 	
-def StockGrab(ID, begin_date = '20140101'):
-	today = date.today()
-	end_data = today.strftime('%Y%m%d')
-	_url = url%(ID, end_data, begin_date)
+def ConvDateToStr(_date):
+	
+	return _date.strftime('%Y%m%d')	
+	
+def StockGrab(ID, begin_date , end_date_str):
+	_url = url%(ID, end_date_str, begin_date)
 	r = requests.get(_url, headers = Headers)
 	page = etree.fromstring(r.text.encode('utf-8'))
 	contents = page.xpath(u'/control/content')
@@ -138,11 +130,11 @@ def GetStockList():
 	return [id for id, sname in stock.items() if re.match(r'\d{6}', id)]
 
 def CalcMA(Array):
-	MA1 = MovingAverage(items, 1, 1)
-	MA5 = MovingAverage(items, 1, 5)
-	MA10 = MovingAverage(items, 1, 10)
-	MA20 = MovingAverage(items, 1, 20)
-	MA30 = MovingAverage(items, 1, 30)
+	MA1 = MovingAverage(Array, 1, 1)
+	MA5 = MovingAverage(Array, 1, 5)
+	MA10 = MovingAverage(Array, 1, 10)
+	MA20 = MovingAverage(Array, 1, 20)
+	MA30 = MovingAverage(Array, 1, 30)
 	VAR = CalcVar( [MA1,MA5, MA10, MA20, MA30] )	
 	MACluster = {'MA1':MA1, 'MA5':MA5, 'MA10':MA10, 'MA20':MA20, 'MA30':MA30, 'VAR':VAR}
 	return MACluster
@@ -155,11 +147,11 @@ def CalcDMA(Array, Short = 5, Long = 89, Middle = 34):
 	return DMA, AMA, DIF
 
 def RuleGoldBar(Prices, Volumes,_date):
-	RecentP = Prices[-4:]
-	RecentV = Volumes[-4:]
+	RecentP = Prices[-5:]
+	RecentV = Volumes[-5:]
 	C0 = CheckDate(_date)
-	C1 = RecentP[3]>RecentP[2]>RecentP[1]
-	C2 = RecentV[3]<RecentV[2]<RecentV[1]
+	C1 = RecentP[4]>RecentP[3]>RecentP[2]>RecentP[1]
+	C2 = RecentV[4]<RecentV[3]<RecentV[2]<RecentV[1]
 	C3 = (RecentP[1]-RecentP[0])/RecentP[0]>0.09
 	Rule = False not in [C0,C1,C2,C3]
 	return Rule
@@ -246,145 +238,140 @@ def CalcBoll(Close,N=89, k=2):
 def RuleTest():
 	return True
 
-heart = GetStockList()
-Result = []
-start = datetime.now()
-baseFolder, folder = mkFolder()
-for num,id in enumerate(heart):
-	temp = datetime.now()		
-	try:
-		stockname, stockid = StockQuery(id)
-		items = StockGrab(stockid)		
-		datex = GetColumn(items, 5)		
-		MACluster = CalcMA(items)		
-		[DMA, AMA, DIF] = CalcDMA(items)		
-		zero_ndx = FindZero(DIF)
-		zero_pts = GetPart(zero_ndx, DIF)
-		length = len(items)
-		idx = xrange(length)
-		emp = ['']*length
-		Open = GetColumn(items, 0)			
-		Close = GetColumn(items, 1)
-		High = GetColumn(items, 2)
-		Low = GetColumn(items, 3)
-		Volumes = GetColumn(items, 4)
-		Vol = NormVol(Volumes)
-		MA, UP, DN, b, Band = CalcBoll(Close)
-		# plt.subplot(2, 1, 1)
-		# plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
-		# plt.plot(idx,MACluster['MA5'], M5clr ,MACluster['MA10'], M10clr ,MACluster['MA20'], M20clr ,MACluster['MA30'], M30clr ,DMACluster['DMA'], DMAclr, DMACluster['AMA'], AMAclr ,DMACluster['DIF'], DIFclr)
-		# plt.plot(idx, DMACluster['DIFF'],'g')
-		# #plt.plot(idx, CalcDiff(DMACluster['DIFF']),'k')
-		# plt.plot(zero_ndx[-3:], zero_pts[-3:], 'ro')
-		# plt.plot(small_ndx[-3:], small_pts[-3:],'g*')
 
-		# Draw Percent
-		# up_index = [i for i,per in enumerate(Percent) if per>=0]
-		# dn_index = [i for i,per in enumerate(Percent) if per<0]
-		# plt.bar(up_index, GetPart(up_index,Percent),color='r',edgecolor='r')
-		# plt.bar(dn_index, GetPart(dn_index,Percent),color='g',edgecolor='g')	
-		# plt.plot(idx, [10]*len(idx),'r--')
-		# plt.plot(idx, [-10]*len(idx),'g--')
+def GoldSeeker(heart, begin_date_str, end_date_str):
+	Result = []
+	start = datetime.now()
+	baseFolder, folder = mkFolder()
+	for num,id in enumerate(heart):
+		temp = datetime.now()		
+		try:
+			stockname, stockid = StockQuery(id)
+			items = StockGrab(stockid, begin_date_str,end_date_str )		
+			datex = GetColumn(items, 5)		
+			MACluster = CalcMA(items)		
+			[DMA, AMA, DIF] = CalcDMA(items)		
+			zero_ndx = FindZero(DIF)
+			zero_pts = GetPart(zero_ndx, DIF)
+			length = len(items)
+			idx = xrange(length)
+			emp = ['']*length
+			Open = GetColumn(items, 0)			
+			Close = GetColumn(items, 1)
+			High = GetColumn(items, 2)
+			Low = GetColumn(items, 3)
+			Volumes = GetColumn(items, 4)
+			Vol = NormVol(Volumes)
+			# MA, UP, DN, b, Band = CalcBoll(Close)
+			# plt.subplot(2, 1, 1)
+			# plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
+			# plt.plot(idx,MACluster['MA5'], M5clr ,MACluster['MA10'], M10clr ,MACluster['MA20'], M20clr ,MACluster['MA30'], M30clr ,DMACluster['DMA'], DMAclr, DMACluster['AMA'], AMAclr ,DMACluster['DIF'], DIFclr)
+			# plt.plot(idx, DMACluster['DIFF'],'g')
+			# #plt.plot(idx, CalcDiff(DMACluster['DIFF']),'k')
+			# plt.plot(zero_ndx[-3:], zero_pts[-3:], 'ro')
+			# plt.plot(small_ndx[-3:], small_pts[-3:],'g*')
 
-		# Draw K-fig and Vol-fig
-		# rise_index = [i for i,per in enumerate(Rise) if per>=0]
-		# fall_index = [i for i,per in enumerate(Rise) if per<0]
-		# plt.vlines(rise_index, GetPart(rise_index,Low), GetPart(rise_index,High), edgecolor='red', linewidth=1, label='_nolegend_') 
-		# plt.vlines(rise_index, GetPart(rise_index,Open), GetPart(rise_index,Close), edgecolor='red', linewidth=4, label='_nolegend_')
-		# plt.vlines(fall_index, GetPart(fall_index,Low), GetPart(fall_index,High), edgecolor='green', linewidth=1, label='_nolegend_') 
-		# plt.vlines(fall_index, GetPart(fall_index,Open), GetPart(fall_index,Close), edgecolor='green', linewidth=4, label='_nolegend_')
-		# plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r')
-		# plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g')
-		# step = 20
-		# plt.xticks(np.arange(len(idx))[0::step], datex[0::step])		
-		# plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)
-		# plt.autoscale(enable=True, axis='x', tight=True)
-		# plt.title(stockname, fontproperties=font)
-		# ax = plt.gca()
-		# #
-		# ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
-		# ax.legend( ('M5', 'M10', 'M20', 'M30'))
+			# Draw Percent
+			# up_index = [i for i,per in enumerate(Percent) if per>=0]
+			# dn_index = [i for i,per in enumerate(Percent) if per<0]
+			# plt.bar(up_index, GetPart(up_index,Percent),color='r',edgecolor='r')
+			# plt.bar(dn_index, GetPart(dn_index,Percent),color='g',edgecolor='g')	
+			# plt.plot(idx, [10]*len(idx),'r--')
+			# plt.plot(idx, [-10]*len(idx),'g--')
 
-		Cross = RuleGoldCross(DMA, AMA, zero_ndx[-3:], idx[-1], datex[-1])
-		Kiss = RuleGoldKiss(DMA, AMA, zero_ndx[-1], Close, idx[-1], datex[-1])		
-		GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
-		for ndx,item in enumerate([Cross, Kiss, GoldBar]):
-			if item:
-				RuleFolder = RuleFolders[ndx]				
-				Percent = RisingPercent(items)
-				Rise = map(sub, Close , Open)
-				rise_index = [i for i,per in enumerate(Rise) if per>=0]
-				fall_index = [i for i,per in enumerate(Rise) if per<0]
-				# ExpMA1 = CalcExpMA(Close, 10)
-				# ExpMA2 = CalcExpMA(Close, 50)
-				step = 5
-				lookback = 55
-				plt.subplot(3, 1, 1)			
-				plt.plot(idx,MA, 'b' ,UP, 'r',DN,'g')
-				
-				# Draw K-fig and Vol-fig
-				rise_index = [i for i,per in enumerate(Rise) if per>=0]
-				fall_index = [i for i,per in enumerate(Rise) if per<0]
-				plt.vlines(rise_index, GetPart(rise_index,Low), GetPart(rise_index,High), edgecolor='red', linewidth=1, label='_nolegend_') 
-				plt.vlines(rise_index, GetPart(rise_index,Open), GetPart(rise_index,Close), edgecolor='red', linewidth=4, label='_nolegend_')
-				plt.vlines(fall_index, GetPart(fall_index,Low), GetPart(fall_index,High), edgecolor='green', linewidth=1, label='_nolegend_') 
-				plt.vlines(fall_index, GetPart(fall_index,Open), GetPart(fall_index,Close), edgecolor='green', linewidth=4, label='_nolegend_')	
-				plt.title(stockname, fontproperties=font)	
-				
-				# plt.subplot(3, 1, 1)			
-				# plt.plot(idx,MACluster['MA5'], M5clr ,MACluster['MA10'], M10clr ,MACluster['MA20'], M20clr ,MACluster['MA30'], M30clr , ExpMA1, EXP1clr , ExpMA2, EXP2clr)
-				plt.title(stockname, fontproperties=font)			
-				plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)
-				# plt.xticks(np.arange(len(idx))[0::step],emp[0::step])			
-				# plt.legend( ('M5', 'M10', 'M20', 'M30'))
-				ax = plt.gca()		
-				ax.autoscale(enable=True, axis='both', tight=True)
-				# ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
-				# ax.set_xlim([idx[-1]-lookback if idx[-1]>lookback else idx[0],idx[-1]])				
-				
-				plt.subplot(3, 1, 2)
-				plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
-				plt.plot(idx,DMA, DMAclr, AMA, AMAclr ,DIF, DIFclr)
-				#plt.plot(idx, DMACluster['DIFF'],'g')
-				#plt.plot(idx, CalcDiff(DMACluster['DIFF']),'k')
-				plt.plot(zero_ndx[-3:], zero_pts[-3:], 'ro')
-				# plt.plot(small_ndx[-3:], small_pts[-3:],'g*')			
-				#plt.xticks(np.arange(len(idx))[0::step], emp[0::step])		
-				plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)				
-				ax = plt.gca()
-				ax.autoscale(enable=True, axis='both', tight=True)			
-				ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
-				ax.set_xlim([idx[-1]-lookback if idx[-1]>lookback else idx[0],idx[-1]])				
-				ax.set_ylim(min(DIF[idx[-1]-lookback if idx[-1]>lookback else idx[0]:] + \
-				AMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:] + \
-				DMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:]),\
-				max(DIF[idx[-1]-lookback if idx[-1]>lookback else idx[0]:] + \
-				AMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:]+\
-				DMA[idx[-1]-lookback if idx[-1]>lookback else idx[0]:]))
-				
-				plt.subplot(3, 1, 3)
-				plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r',align="center")
-				plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g',align="center")				
-				plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)		
-				plt.xticks(np.arange(len(idx))[0::step], emp[0::step])
-				ax = plt.gca()	
-				ax.autoscale(enable=True, axis='both', tight=True)
-				ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
-				ax.set_xlim([idx[-1]-lookback if idx[-1]>lookback else idx[0],idx[-1]])				
-				# plt.show()
-				goldstock = '%s - %s - %s'%(stockname,stockid,RuleFolder[4:])
-				Result.append(goldstock)
-
-				try:
-					plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname,datex[zero_ndx[-1]]), dpi=200)
-				except:
-					plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname[1:],datex[zero_ndx[-1]]), dpi=200)
-				plt.clf()
+			# Draw Vol-fig
+			# plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r')
+			# plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g')
 			
-		print 'Complete %s: %s - %s, Elapsed Time: %s'%(num, stockname,stockid,temp-start)		
-	except Exception as e:
-		print str(e)+ ' when grabing stock:' + str(id)
 
-pushStocks(Result,folder)
-# if __name__ == '__main__':
+			Cross = RuleGoldCross(DMA, AMA, zero_ndx[-3:], idx[-1], datex[-1])
+			Kiss = RuleGoldKiss(DMA, AMA, zero_ndx[-1], Close, idx[-1], datex[-1])		
+			GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
+			for ndx,item in enumerate([Cross, Kiss, GoldBar]):
+				if item:
+					RuleFolder = RuleFolders[ndx]				
+					Percent = RisingPercent(items)
+					Rise = map(sub, Close , Open)
+					rise_index = [i for i,per in enumerate(Rise) if per>=0]
+					fall_index = [i for i,per in enumerate(Rise) if per<0]
+
+					step = 5
+					lookback = 55
+					id_start = idx[-1]-lookback if idx[-1]>lookback else idx[0]
+					plt.subplot(3, 1, 1)			
+					# plt.plot(idx,MA, 'b' ,UP, 'r',DN,'g')
+					
+					# Draw K-fig 
+					rise_index = [i for i,per in enumerate(Rise) if per>=0]
+					fall_index = [i for i,per in enumerate(Rise) if per<0]
+					plt.vlines(rise_index, GetPart(rise_index,Low), GetPart(rise_index,High), edgecolor='red', linewidth=1, label='_nolegend_') 
+					plt.vlines(rise_index, GetPart(rise_index,Open), GetPart(rise_index,Close), edgecolor='red', linewidth=4, label='_nolegend_')
+					plt.vlines(fall_index, GetPart(fall_index,Low), GetPart(fall_index,High), edgecolor='green', linewidth=1, label='_nolegend_') 
+					plt.vlines(fall_index, GetPart(fall_index,Open), GetPart(fall_index,Close), edgecolor='green', linewidth=4, label='_nolegend_')	
+					plt.title(stockname, fontproperties=font)	
+					
+					plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)		
+					ax = plt.gca()		
+					ax.autoscale(enable=True, axis='both', tight=True)
+					ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
+					ax.set_xlim([id_start,idx[-1]])				
+					ax.set_ylim(min(Close[id_start:]), max(Close[id_start:]))
+					
+					plt.subplot(3, 1, 2)
+					plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
+					plt.plot(idx,DMA, DMAclr, AMA, AMAclr ,DIF, DIFclr)
+					#plt.plot(idx, DMACluster['DIFF'],'g')
+					#plt.plot(idx, CalcDiff(DMACluster['DIFF']),'k')
+					plt.plot(zero_ndx[-3:], zero_pts[-3:], 'ro')			
+					plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)				
+					ax = plt.gca()
+					ax.autoscale(enable=True, axis='both', tight=True)			
+					ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
+					ax.set_xlim([id_start,idx[-1]])				
+					ax.set_ylim(min(DIF[id_start:] + AMA[id_start:] + DMA[id_start:]),\
+					max(DIF[id_start:] + AMA[id_start:]+ DMA[id_start:]))
+					
+					plt.subplot(3, 1, 3)
+					plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r',align="center")
+					plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g',align="center")				
+					plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)		
+					plt.xticks(np.arange(len(idx))[0::step], emp[0::step])
+					ax = plt.gca()	
+					ax.autoscale(enable=True, axis='both', tight=True)
+					ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
+					ax.set_xlim([id_start,idx[-1]])				
+					# plt.show()
+					goldstock = '%s - %s - %s'%(stockname,stockid,RuleFolder[4:])
+					Result.append(goldstock)
+					try:
+						plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname,datex[zero_ndx[-1]]), dpi=100)
+					except:
+						plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname[1:],datex[zero_ndx[-1]]), dpi=100)
+					plt.clf()				
+			print 'Complete %s: %s - %s, Elapsed Time: %s'%(num, stockname,stockid,temp-start)		
+		except Exception as e:
+			print str(e)+ ' when grabing stock:' + str(id)
+	return Result, folder
+
+if __name__ == '__main__':
+	font = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=14) 
+	Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
+	url = 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=%s&end_date=%s&begin_date=%s' 
+	# 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=sz002440&end_date=20150131&begin_date=20141201'
+	M5clr  = '#0000CC'
+	M10clr = '#FFCC00'
+	M20clr = '#CC6699'
+	M30clr = '#009966'
+	DMAclr = '#000000'
+	AMAclr = '#FF0033'
+	DIFclr = '#0066FF'
+	VARclr = '#3300FF'
+	EXP1clr = '#FF00FF'
+	EXP2clr = '#3300CC'
+	RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleGoldBar']
+	heart = GetStockList()
+	begin_date = '20140101'
+	end_date = date.today().strftime('%Y%m%d')
+	Result, folder = GoldSeeker(heart, begin_date, end_date)
+	pushStocks(Result,folder)
 			
