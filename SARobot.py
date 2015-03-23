@@ -12,6 +12,20 @@ from operator import itemgetter, div, sub
 from StockList import stock
 import pushybullet as pb
 
+font = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=14) 
+M5clr  = '#0000CC'
+M10clr = '#FFCC00'
+M20clr = '#CC6699'
+M30clr = '#009966'
+DMAclr = '#000000'
+AMAclr = '#FF0033'
+DIFclr = '#0066FF'
+VARclr = '#3300FF'
+EXP1clr = '#FF00FF'
+EXP2clr = '#3300CC'
+RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleGoldBar']
+Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
+
 def mkFolder():	
 	currentpath  = os.path.realpath(__file__)
 	basedir = os.path.dirname(currentpath)
@@ -46,15 +60,13 @@ def CheckDate(_date):
 
 def ConvStrToDate(_str):
 	ymd = time.strptime(_str,'%Y%m%d')
-	current = date(*ymd[0:3])
-	tommorrow = current + timedelta(days=1)
-	return tommorrow
+	return date(*ymd[0:3])
 	
-def ConvDateToStr(_date):
-	
+def ConvDateToStr(_date):	
 	return _date.strftime('%Y%m%d')	
 	
 def StockGrab(ID, begin_date , end_date_str):
+	url = 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=%s&end_date=%s&begin_date=%s' 
 	_url = url%(ID, end_date_str, begin_date)
 	r = requests.get(_url, headers = Headers)
 	page = etree.fromstring(r.text.encode('utf-8'))
@@ -146,29 +158,29 @@ def CalcDMA(Array, Short = 5, Long = 89, Middle = 34):
 	# DMACluster = {'DMA':DMA, 'AMA':AMA, 'DIF':DIF}
 	return DMA, AMA, DIF
 
-def RuleGoldBar(Prices, Volumes,_date):
+def RuleGoldBar(Prices, Volumes,_date, check = True):
 	RecentP = Prices[-5:]
 	RecentV = Volumes[-5:]
-	C0 = CheckDate(_date)
+	C0 = CheckDate(_date) if check else True
 	C1 = RecentP[4]>RecentP[3]>RecentP[2]>RecentP[1]
 	C2 = RecentV[4]<RecentV[3]<RecentV[2]<RecentV[1]
 	C3 = (RecentP[1]-RecentP[0])/RecentP[0]>0.09
 	Rule = False not in [C0,C1,C2,C3]
 	return Rule
 	
-def RuleGoldCross(DMA, AMA, zeros, last_ndx, _date):
+def RuleGoldCross(DMA, AMA, zeros, last_ndx, _date, check = True):
 	DIF = map(sub, DMA , AMA)
 	DIFF = CalcDiff(DIF)
 	AMADIFF = CalcDiff(AMA)
-	C0 = CheckDate(_date)
+	C0 = CheckDate(_date) if check else True
 	C1 = DIF[last_ndx]>0
 	C2 = sum(DIF[zeros[0]:zeros[1]])>0
 	C3 = sum(DIF[zeros[1]:zeros[2]])<0
 	C4 = sum(DIF[zeros[0]:zeros[2]])>0
-	C5 = last_ndx - zeros[2] < 3
+	C5 = last_ndx - zeros[2] < 2
 	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
-	C7 = (zeros[2] - zeros[1]) < 3
-	C8 = AMADIFF[last_ndx] >= 0
+	C7 = (zeros[2] - zeros[1]) < 5
+	C8 = AMADIFF[last_ndx] > 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]
 	return Rule
 	
@@ -189,19 +201,19 @@ def RuleGoldWButtom(DMA, AMA, zero, last_ndx, _date):
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
 	return Rule		
 	
-def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date):
+def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date, check = True):
 	DIF = map(sub, DMA , AMA)	
 	DIFF = CalcDiff(DIF)
 	AMADIFF = CalcDiff(AMA)
 	DFZeros = FindZero(DIFF)
-	C0 = CheckDate(_date)
+	C0 = CheckDate(_date) if check else True
 	C1 = 0<DIF[last_ndx]<0.015*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
 	C2 = 0<DIF[DFZeros[-1]]<0.01*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
 	C3 = sum(DIF[zero:]) > 0
-	C4 = 4<(last_ndx - zero)<45 and (last_ndx - DFZeros[-1])<3 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
+	C4 = 4<(last_ndx - zero)<45 and (last_ndx - DFZeros[-1])<2 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
 	C5 = DIFF[zero] > 0
 	C6 = DIFF[last_ndx]>=0
-	C7 = AMADIFF[last_ndx] >= 0
+	C7 = AMADIFF[last_ndx] > 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
 	return Rule	
 
@@ -234,9 +246,6 @@ def CalcBoll(Close,N=89, k=2):
 	b = map(lambda x,y,z:(x-z)/(float(y-z) if y!=z else 1.0), Close, UP, DN)
 	Band = map(lambda x,y,z:(x-z)/(float(y) if y!=0 else 1.0), UP, MD, DN)
 	return MA, UP, DN, b, Band
-	
-def RuleTest():
-	return True
 
 
 def GoldSeeker(heart, begin_date_str, end_date_str):
@@ -354,21 +363,7 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 	return Result, folder
 
 if __name__ == '__main__':
-	font = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=14) 
-	Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
-	url = 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=%s&end_date=%s&begin_date=%s' 
-	# 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=sz002440&end_date=20150131&begin_date=20141201'
-	M5clr  = '#0000CC'
-	M10clr = '#FFCC00'
-	M20clr = '#CC6699'
-	M30clr = '#009966'
-	DMAclr = '#000000'
-	AMAclr = '#FF0033'
-	DIFclr = '#0066FF'
-	VARclr = '#3300FF'
-	EXP1clr = '#FF00FF'
-	EXP2clr = '#3300CC'
-	RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleGoldBar']
+	
 	heart = GetStockList()
 	begin_date = '20140101'
 	end_date = date.today().strftime('%Y%m%d')

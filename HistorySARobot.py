@@ -1,22 +1,12 @@
 # -*- coding=utf-8 -*-
-import os
-import re
-import time
-from datetime import datetime,timedelta,date
-import requests
-from lxml import etree
-import matplotlib.pyplot as plt
-from matplotlib.font_manager import FontProperties
-import numpy as np
-from operator import itemgetter, div, sub
-from StockList import stock
-import pushybullet as pb
+
+from SARobot import *
 
 def mkFolder(stockid):
 	flag = False
 	currentpath  = os.path.realpath(__file__)
 	basedir = os.path.dirname(currentpath)
-	folder = 'analysis'+datetime.today().strftime('%Y%m%d')
+	folder = 'analysis' 
 	folderpath =os.path.join(basedir, folder)
 	if not os.path.exists(folderpath):
 		os.mkdir(folderpath)
@@ -30,221 +20,6 @@ def mkFolder(stockid):
 		if not os.path.exists(subfolder):
 			os.mkdir(subfolder)
 	return stockpath,folder,flag
-
-def pushStocks(list, title):
-	API_KEY = "pdaXjHTgQJ9s5sZRdfi93BMTz4CjICGl"
-	try:
-		api = pb.PushBullet(API_KEY)
-		device = api['LGE Nexus 4']
-		# print device.nickname
-		push = pb.ListPush(list, title)
-		api.push(push, device)
-		return True
-	except Exception as e:
-		# print e
-		return False
-		
-def CheckDate(_date):
-	today = date.today()
-	yesterday = today - timedelta(days=1)
-	flag = _date in [today.strftime('%Y-%m-%d'),yesterday.strftime('%Y-%m-%d')]
-	return True
-
-def ConvStrToDate(_str):
-	ymd = time.strptime(_str,'%Y%m%d')
-	return date(*ymd[0:3])
-	
-def ConvDateToStr(_date):	
-	return _date.strftime('%Y%m%d')	
-	
-def StockGrab(ID, begin_date, end_date_str):
-	_url = url%(ID, end_date_str, begin_date)
-	r = requests.get(_url, headers = Headers)
-	page = etree.fromstring(r.text.encode('utf-8'))
-	contents = page.xpath(u'/control/content')
-	items = [[eval(content.attrib['o']),eval(content.attrib['c']),eval(content.attrib['h']),eval(content.attrib['l']),eval(content.attrib['v']),content.attrib['d']] for content in contents]
-	return items
-
-def ParseDate(items):
-	begin_date = items[0][5]
-	end_date = items[-1][5]
-	return begin_date, end_date
-	
-def StockQuery(stockname): 
-	m = re.match(r'\d{6}', stockname)
-	stockid = stockname if m else stock.get(stockname)
-	stockname = stock.get(stockname) if m else stockname
-	stock_pre = 'sh' if stockid[0] == '6' else 'sz'
-	stockid = stock_pre + stockid
-	return stockname.decode('utf-8'), stockid	
-	
-def GetColumn(Array, column):
-	return [itemgetter(column)(row) for row in Array]
-
-def GetPart(indices, List):
-	return [List[idx] for idx in indices]
-	
-	
-def MovingAverage(Array, idx, width):
-	length = len(Array)
-	if type(Array[0]) == type([]):
-		return [sum([itemgetter(idx)(elem) for elem in Array[i-width+1:i+1]])/float(width) if i >= width-1 else Array[i][idx] for i in xrange(length)]
-	else: 
-		return [sum( Array[i-width+1:i+1] if i >= width-1 else (Array[0:i]+[Array[i]]*(width-i)))/float(width) for i in xrange(length)]
-	
-def CalcExpMA(List, Period):
-	length = len(List)
-	def ExpMA(List, n, N):
-		return List[0] if n == 0 else (List[n]*2.0 + (N - 1.0)*ExpMA(List, n-1,N))/( N +1.0)
-	ExpMA = [ExpMA(List,i,Period) for i in xrange(length)]
-	# ExpMA2 = [ExpMA(List,i,50) for i in xrange(length)]
-	return ExpMA
-		
-def RisingPercent(Array):
-	length = len(Array)
-	return [100.0*(itemgetter(1)(Array[i]) - itemgetter(1)(Array[i-1]))/itemgetter(1)(Array[i-1]) if i >=1 else 0 for i in xrange(length)]
-	
-def CalcVar(Array):
-	Var = [np.var(GetColumn(Array, i)) for i in xrange(len(Array[0]))]
-	return Var
-	
-def NormVol(List):
-	return [10.0*elem/max(List) for elem in List]
-
-def FindZero(List):
-	L_S1 = List[1:]+[List[-1]]
-	npList = np.array(List)
-	npL_S1 = np.array(L_S1)
-	multi = npList*npL_S1
-	indices = list((multi < 0).nonzero()[0])	
-	return indices
-	
-def FindClose(List):
-	eps = 0.02
-	npList = np.array(List)
-	indices = list((abs(npList)<eps).nonzero()[0])
-	return indices
-	
-def CalcDiff(List):
-	List1 = List[1:]+[List[-1]]
-	List2 = [List[0]]+List[0:-1]
-	Diff = list(np.array(map(sub, List1, List2))*5.0)
-	return Diff
-
-def CalcInteg(List):
-	return [sum(List[0:i+1]) for i,elem in enumerate(List)]
-	
-def GetStockList():		
-	return [id for id, sname in stock.items() if re.match(r'\d{6}', id)]
-
-def CalcMA(Array):
-	MA1 = MovingAverage(Array, 1, 1)
-	MA5 = MovingAverage(Array, 1, 5)
-	MA10 = MovingAverage(Array, 1, 10)
-	MA20 = MovingAverage(Array, 1, 20)
-	MA30 = MovingAverage(Array, 1, 30)
-	VAR = CalcVar( [MA1,MA5, MA10, MA20, MA30] )	
-	MACluster = {'MA1':MA1, 'MA5':MA5, 'MA10':MA10, 'MA20':MA20, 'MA30':MA30, 'VAR':VAR}
-	return MACluster
-
-def CalcDMA(Array, Short = 5, Long = 89, Middle = 34):
-	DMA = map(sub, MovingAverage(Array, 1, Short) , MovingAverage(Array, 1, Long))
-	AMA = MovingAverage(DMA, 0, Middle)
-	DIF = map(sub, DMA , AMA)
-	# DMACluster = {'DMA':DMA, 'AMA':AMA, 'DIF':DIF}
-	return DMA, AMA, DIF
-
-def RuleGoldBar(Prices, Volumes,_date):
-	RecentP = Prices[-5:]
-	RecentV = Volumes[-5:]
-	C0 = CheckDate(_date)
-	C1 = RecentP[4]>RecentP[3]>RecentP[2]>RecentP[1]
-	C2 = RecentV[4]<RecentV[3]<RecentV[2]<RecentV[1]
-	C3 = (RecentP[1]-RecentP[0])/RecentP[0]>0.09
-	Rule = False not in [C0,C1,C2,C3]
-	return Rule
-	
-def RuleGoldCross(DMA, AMA, zeros, last_ndx, _date):
-	DIF = map(sub, DMA , AMA)
-	DIFF = CalcDiff(DIF)
-	AMADIFF = CalcDiff(AMA)
-	C0 = CheckDate(_date)
-	C1 = DIF[last_ndx]>0
-	C2 = sum(DIF[zeros[0]:zeros[1]])>0
-	C3 = sum(DIF[zeros[1]:zeros[2]])<0
-	C4 = sum(DIF[zeros[0]:zeros[2]])>0
-	C5 = last_ndx - zeros[2] < 3
-	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
-	C7 = (zeros[2] - zeros[1]) < 3
-	C8 = AMADIFF[last_ndx] >= 0
-	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]
-	return Rule
-	
-def RuleGoldWButtom(DMA, AMA, zero, last_ndx, _date):	
-	DIF = map(sub, DMA , AMA)
-	DIFF = CalcDiff(DIF)
-	DIFF_DMA = CalcDiff(DMA)
-	DIFF_AMA = CalcDiff(AMA)
-	DFZeros = FindZero(DIFF)	
-	C0 = CheckDate(_date)
-	C1 = DIFF_DMA[zero] >0   # C1/C2 - Gold Cross
-	C2 = DIFF_AMA[zero] <0
-	C3 = DIF[last_ndx]>0     # latest day DMA>AMA
-	C4 = sum(DIF[zero:]) > 0 
-	C5 = (last_ndx - zero)<3 # rise in recent 3 days 
-	C6 = (last_ndx - DFZeros[-1])<5 
-	C7 = DIFF[zero] > 0
-	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
-	return Rule		
-	
-def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date):
-	DIF = map(sub, DMA , AMA)	
-	DIFF = CalcDiff(DIF)
-	AMADIFF = CalcDiff(AMA)
-	DFZeros = FindZero(DIFF)
-	C0 = CheckDate(_date)
-	C1 = 0<DIF[last_ndx]<0.015*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
-	C2 = 0<DIF[DFZeros[-1]]<0.01*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
-	C3 = sum(DIF[zero:]) > 0
-	C4 = 4<(last_ndx - zero)<45 and (last_ndx - DFZeros[-1])<3 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
-	C5 = DIFF[zero] > 0
-	C6 = DIFF[last_ndx]>=0
-	C7 = AMADIFF[last_ndx] >= 0
-	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
-	return Rule	
-
-def RuleEXPMA(List, last_ndx, _date):
-	EXP1 = CalcExpMA(List,10)
-	EXP2 = CalcExpMA(List,50)
-	DIFEXP = map(sub, EXP1, EXP2)
-	EXPZeros = FindZero(DIFEXP)	
-	C0 = CheckDate(_date)
-	C1 = DIFEXP[last_ndx]>0
-	C2 = (last_ndx - EXPZeros[-1])<5
-	Rule = False not in [C0,C1,C2]
-	return Rule
-	
-def CalcBoll(Close,N=89, k=2):
-# Bollinger Bands consist of:
-# an N-period moving average (MA)
-# an upper band at K times an N-period standard deviation above the moving average (MA + Kσ)
-# a lower band at K times an N-period standard deviation below the moving average (MA − Kσ)
-# %b = (last − lowerBB) / (upperBB − lowerBB)
-# Bandwidth tells how wide the Bollinger Bands are on a normalized basis. Writing the same symbols as before, and middleBB for the moving average, or middle Bollinger Band:
-# Bandwidth = (upperBB − lowerBB) / middleBB
-	length = len(Close)
-	MA = MovingAverage(Close,0,N)
-	# MA = CalcExpMA(Close, N)
-	SM = map(lambda x,y:(x-y)**2, Close, MA)
-	MD = [(sum(SM[i-N+1:i+1] if i >= N-1 else (SM[0:i]+[SM[i]]*(N-i)))/float(N))**0.5 for i in xrange(length)]
-	UP = map(lambda x,y:x+y*k, MA, MD)
-	DN = map(lambda x,y:x-y*k, MA, MD)
-	b = map(lambda x,y,z:(x-z)/(float(y-z) if y!=z else 1.0), Close, UP, DN)
-	Band = map(lambda x,y,z:(x-z)/(float(y) if y!=0 else 1.0), UP, MD, DN)
-	return MA, UP, DN, b, Band
-	
-def RuleTest():
-	return True
 
 def AnalyInPeriod(stockid, items):
 	try:		
@@ -261,9 +36,9 @@ def AnalyInPeriod(stockid, items):
 		Volumes = GetColumn(items, 4)
 		Vol = NormVol(Volumes)
 
-		Cross = RuleGoldCross(DMA, AMA, zero_ndx[-3:], idx[-1], datex[-1])
-		Kiss = RuleGoldKiss(DMA, AMA, zero_ndx[-1], Close, idx[-1], datex[-1])		
-		GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
+		Cross = RuleGoldCross(DMA, AMA, zero_ndx[-3:], idx[-1], datex[-1], False)
+		Kiss = RuleGoldKiss(DMA, AMA, zero_ndx[-1], Close, idx[-1], datex[-1], False)		
+		GoldBar = RuleGoldBar(Close, Volumes, datex[-1], False)
 		for ndx,item in enumerate([Cross, Kiss, GoldBar]):
 			if item:
 				RuleFolder = RuleFolders[ndx]
@@ -319,28 +94,14 @@ def AnalyInPeriod(stockid, items):
 				# plt.show()
 				# goldstock = '%s - %s - %s'%(stockname,stockid,RuleFolder[4:])
 				# Result.append(goldstock)
-				plt.savefig('%s/%s/%s %s.png'%(baseFolder,RuleFolder,stockid,datex[-1]), dpi=100)
+				plt.savefig('%s/%s/%s %s.png'%(baseFolder,RuleFolder,stockid,datex[-1]), dpi=50)
 				plt.clf()				
 				# print 'Complete %s: %s - %s'%(num, stockname,stockid)		
 	except Exception as e:
 		print str(e)+ ' when grabing stock:' + str(stockid)
 
 if __name__ == '__main__':
-	font = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=14) 
-	Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
-	url = 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=%s&end_date=%s&begin_date=%s' 
-	# 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=sz002440&end_date=20150131&begin_date=20141201'
-	M5clr  = '#0000CC'
-	M10clr = '#FFCC00'
-	M20clr = '#CC6699'
-	M30clr = '#009966'
-	DMAclr = '#000000'
-	AMAclr = '#FF0033'
-	DIFclr = '#0066FF'
-	VARclr = '#3300FF'
-	EXP1clr = '#FF00FF'
-	EXP2clr = '#3300CC'
-	RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleGoldBar']
+	
 	heart = GetStockList()
 	start = datetime.now()
 	for num,id in enumerate(heart):
