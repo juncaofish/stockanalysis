@@ -179,7 +179,7 @@ def RuleGoldCross(DMA, AMA, zeros, last_ndx, _date, check = True):
 	C4 = sum(DIF[zeros[0]:zeros[2]])>0
 	C5 = last_ndx - zeros[2] < 2
 	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
-	C7 = (zeros[2] - zeros[1]) < 5
+	C7 = (zeros[2] - zeros[1]) < 10
 	C8 = AMADIFF[last_ndx] > 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]
 	return Rule
@@ -207,10 +207,10 @@ def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date, check = True):
 	AMADIFF = CalcDiff(AMA)
 	DFZeros = FindZero(DIFF)
 	C0 = CheckDate(_date) if check else True
-	C1 = 0<DIF[last_ndx]<0.015*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
+	C1 = 0<DIF[last_ndx]<0.02*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
 	C2 = 0<DIF[DFZeros[-1]]<0.01*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
 	C3 = sum(DIF[zero:]) > 0
-	C4 = 4<(last_ndx - zero)<45 and (last_ndx - DFZeros[-1])<2 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
+	C4 = 4<(last_ndx - zero)<60 and (last_ndx - DFZeros[-1])<3 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
 	C5 = DIFF[zero] > 0
 	C6 = DIFF[last_ndx]>=0
 	C7 = AMADIFF[last_ndx] > 0
