@@ -94,7 +94,7 @@ def AnalyInPeriod(stockid, items):
 				# plt.show()
 				# goldstock = '%s - %s - %s'%(stockname,stockid,RuleFolder[4:])
 				# Result.append(goldstock)
-				plt.savefig('%s/%s/%s %s.png'%(baseFolder,RuleFolder,stockid,datex[-1]), dpi=50)
+				plt.savefig('%s/%s/%s %s.png'%(baseFolder,RuleFolder,stockid,datex[-1]), dpi=90)
 				plt.clf()				
 				# print 'Complete %s: %s - %s'%(num, stockname,stockid)		
 	except Exception as e:
@@ -116,7 +116,6 @@ if __name__ == '__main__':
 						pass
 					else:					
 						temp_items = items[days-150:days+1]
-						# print temp_items[0][5]
 						AnalyInPeriod(stockid, temp_items)
 			except Exception as e:
 				print str(e)+ ' when grabing stock:' + str(stockid)

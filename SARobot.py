@@ -11,6 +11,7 @@ import numpy as np
 from operator import itemgetter, div, sub
 from StockList import stock
 import pushybullet as pb
+from PyFetion import *
 
 font = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=14) 
 M5clr  = '#0000CC'
@@ -52,6 +53,12 @@ def pushStocks(list, title):
 		# print e
 		return False
 		
+def pushwithFetion(msg, sendto):
+	phone = PyFetion('13788976646', 'a5214496','TCP',debug=False)
+	phone.login(FetionHidden)
+	for item in sendto:
+		phone.send_sms(msg.encode('utf-8'),item)
+	
 def CheckDate(_date):
 	today = date.today()
 	yesterday = today - timedelta(days=1)
@@ -210,7 +217,7 @@ def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date, check = True):
 	C1 = 0<DIF[last_ndx]<0.02*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
 	C2 = 0<DIF[DFZeros[-1]]<0.01*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
 	C3 = sum(DIF[zero:]) > 0
-	C4 = 4<(last_ndx - zero)<60 and (last_ndx - DFZeros[-1])<3 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
+	C4 = 4<(last_ndx - zero)<60 and (last_ndx - DFZeros[-1])<2 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
 	C5 = DIFF[zero] > 0
 	C6 = DIFF[last_ndx]>=0
 	C7 = AMADIFF[last_ndx] > 0
@@ -369,4 +376,5 @@ if __name__ == '__main__':
 	end_date = date.today().strftime('%Y%m%d')
 	Result, folder = GoldSeeker(heart, begin_date, end_date)
 	pushStocks(Result,folder)
+	pushwithFetion('\n'.join(Result),['13788976646','13601621490'])
 			
