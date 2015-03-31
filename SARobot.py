@@ -27,6 +27,16 @@ EXP2clr = '#3300CC'
 RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleGoldBar']
 Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
 
+def grabRealTimeStock(_stockid):
+	url = 'http://hq.sinajs.cn/list=%s'%_stockid
+	r = requests.get(url, headers = Headers)
+	regx = re.compile(r'\=\"(.*)\"\;');
+	m =  regx.search(r.text)
+	info = m.group(0)
+	infos = info.split(',')
+	# Return Open/Close/High/Low/volume/Date
+	return [eval(infos[1]),eval(infos[3]),eval(infos[4]),eval(infos[5]),eval(infos[8])/100,infos[30]] 
+
 def mkFolder():	
 	currentpath  = os.path.realpath(__file__)
 	basedir = os.path.dirname(currentpath)
@@ -50,7 +60,7 @@ def pushStocks(list, title):
 		api.push(push, device)
 		return True
 	except Exception as e:
-		# print e
+		pass
 		return False
 		
 def pushwithFetion(msg, sendto):
@@ -72,13 +82,18 @@ def ConvStrToDate(_str):
 def ConvDateToStr(_date):	
 	return _date.strftime('%Y%m%d')	
 	
-def StockGrab(ID, begin_date , end_date_str):
+def StockGrab(_stockid, begin_date , end_date_str):
 	url = 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=%s&end_date=%s&begin_date=%s' 
-	_url = url%(ID, end_date_str, begin_date)
+	_url = url%(_stockid, end_date_str, begin_date)
 	r = requests.get(_url, headers = Headers)
 	page = etree.fromstring(r.text.encode('utf-8'))
 	contents = page.xpath(u'/control/content')
 	items = [[eval(content.attrib['o']),eval(content.attrib['c']),eval(content.attrib['h']),eval(content.attrib['l']),eval(content.attrib['v']),content.attrib['d']] for content in contents]
+	todaydate = date.today().strftime('%Y-%m-%d')
+	if todaydate != items[-1][-1]:
+		latest = grabRealTimeStock(_stockid)
+		if latest[-1] == todaydate:
+			items.append(latest)		
 	return items
 
 def StockQuery(stockname): 
@@ -189,24 +204,7 @@ def RuleGoldCross(DMA, AMA, zeros, last_ndx, _date, check = True):
 	C7 = (zeros[2] - zeros[1]) < 10
 	C8 = AMADIFF[last_ndx] > 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]
-	return Rule
-	
-def RuleGoldWButtom(DMA, AMA, zero, last_ndx, _date):	
-	DIF = map(sub, DMA , AMA)
-	DIFF = CalcDiff(DIF)
-	DIFF_DMA = CalcDiff(DMA)
-	DIFF_AMA = CalcDiff(AMA)
-	DFZeros = FindZero(DIFF)	
-	C0 = CheckDate(_date)
-	C1 = DIFF_DMA[zero] >0   # C1/C2 - Gold Cross
-	C2 = DIFF_AMA[zero] <0
-	C3 = DIF[last_ndx]>0     # latest day DMA>AMA
-	C4 = sum(DIF[zero:]) > 0 
-	C5 = (last_ndx - zero)<3 # rise in recent 3 days 
-	C6 = (last_ndx - DFZeros[-1])<5 
-	C7 = DIFF[zero] > 0
-	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
-	return Rule		
+	return Rule	
 	
 def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date, check = True):
 	DIF = map(sub, DMA , AMA)	
@@ -214,14 +212,14 @@ def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date, check = True):
 	AMADIFF = CalcDiff(AMA)
 	DFZeros = FindZero(DIFF)
 	C0 = CheckDate(_date) if check else True
-	C1 = 0<DIF[last_ndx]<0.02*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
-	C2 = 0<DIF[DFZeros[-1]]<0.01*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
+	C1 = 0<DIF[last_ndx]<0.03*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
+	C2 = 0<DIF[DFZeros[-1]]<0.02*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
 	C3 = sum(DIF[zero:]) > 0
 	C4 = 4<(last_ndx - zero)<60 and (last_ndx - DFZeros[-1])<2 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
 	C5 = DIFF[zero] > 0
-	C6 = DIFF[last_ndx]>=0
+	C6 = DIFF[last_ndx] >= 0
 	C7 = AMADIFF[last_ndx] > 0
-	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]
+	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]	
 	return Rule	
 
 def RuleEXPMA(List, last_ndx, _date):
@@ -253,7 +251,6 @@ def CalcBoll(Close,N=89, k=2):
 	b = map(lambda x,y,z:(x-z)/(float(y-z) if y!=z else 1.0), Close, UP, DN)
 	Band = map(lambda x,y,z:(x-z)/(float(y) if y!=0 else 1.0), UP, MD, DN)
 	return MA, UP, DN, b, Band
-
 
 def GoldSeeker(heart, begin_date_str, end_date_str):
 	Result = []
@@ -370,7 +367,6 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 	return Result, folder
 
 if __name__ == '__main__':
-	
 	heart = GetStockList()
 	begin_date = '20140101'
 	end_date = date.today().strftime('%Y%m%d')
