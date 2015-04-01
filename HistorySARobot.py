@@ -39,7 +39,8 @@ def AnalyInPeriod(stockid, items):
 		Cross = RuleGoldCross(DMA, AMA, zero_ndx[-3:], idx[-1], datex[-1], False)
 		Kiss = RuleGoldKiss(DMA, AMA, zero_ndx[-1], Close, idx[-1], datex[-1], False)		
 		GoldBar = RuleGoldBar(Close, Volumes, datex[-1], False)
-		for ndx,item in enumerate([Cross, Kiss, GoldBar]):
+		DbleQuty = RuleDoubleQuantity(Close, Volumes, datex[-1], False)
+		for ndx,item in enumerate([Cross, Kiss, GoldBar,DbleQuty]):
 			if item:
 				RuleFolder = RuleFolders[ndx]
 				Open = GetColumn(items, 0)
@@ -109,7 +110,7 @@ if __name__ == '__main__':
 		baseFolder, folder, flag = mkFolder(stockid)
 		if not flag:
 			try:
-				items = StockGrab(stockid, '19910101','20160101')		
+				items = GrabStock(stockid, '19910101','20160101')		
 				datex = GetColumn(items, 5)
 				for days,temp_date_str  in enumerate(datex):
 					if days<150:

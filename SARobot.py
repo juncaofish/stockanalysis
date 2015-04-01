@@ -24,18 +24,8 @@ DIFclr = '#0066FF'
 VARclr = '#3300FF'
 EXP1clr = '#FF00FF'
 EXP2clr = '#3300CC'
-RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleGoldBar',u'RuleDoubleQuantity']
+RuleFolders = [u'RuleDmacrs',u'RuleDmakis',u'RuleGoldbar',u'RuleDblQaty']
 Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
-
-def grabRealTimeStock(_stockid):
-	url = 'http://hq.sinajs.cn/list=%s'%_stockid
-	r = requests.get(url, headers = Headers)
-	regx = re.compile(r'\=\"(.*)\"\;');
-	m =  regx.search(r.text)
-	info = m.group(0)
-	infos = info.split(',')
-	# Return Open/Close/High/Low/volume/Date
-	return [eval(infos[1]),eval(infos[3]),eval(infos[4]),eval(infos[5]),eval(infos[8])/100,infos[30]] 
 
 def mkFolder():	
 	currentpath  = os.path.realpath(__file__)
@@ -67,7 +57,7 @@ def pushwithFetion(msg, sendto):
 	phone = PyFetion('13788976646', 'a5214496','TCP',debug=False)
 	phone.login(FetionHidden)
 	for item in sendto:
-		phone.send_sms(msg.encode('utf-8'),item)
+		phone.send_sms(msg,item)
 	
 def CheckDate(_date):
 	today = date.today()
@@ -80,9 +70,19 @@ def ConvStrToDate(_str):
 	return date(*ymd[0:3])
 	
 def ConvDateToStr(_date):	
-	return _date.strftime('%Y%m%d')	
+	return _date.strftime('%Y%m%d')
 	
-def StockGrab(_stockid, begin_date , end_date_str):
+def GrabRealTimeStock(_stockid):
+	url = 'http://hq.sinajs.cn/list=%s'%_stockid
+	r = requests.get(url, headers = Headers)
+	regx = re.compile(r'\=\"(.*)\"\;');
+	m =  regx.search(r.text)
+	info = m.group(0)
+	infos = info.split(',')
+	# Return Open/Close/High/Low/volume/Date
+	return [eval(infos[1]),eval(infos[3]),eval(infos[4]),eval(infos[5]),eval(infos[8])/100,infos[30]] 
+	
+def GrabStock(_stockid, begin_date , end_date_str):
 	url = 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=%s&end_date=%s&begin_date=%s' 
 	_url = url%(_stockid, end_date_str, begin_date)
 	r = requests.get(_url, headers = Headers)
@@ -90,8 +90,8 @@ def StockGrab(_stockid, begin_date , end_date_str):
 	contents = page.xpath(u'/control/content')
 	items = [[eval(content.attrib['o']),eval(content.attrib['c']),eval(content.attrib['h']),eval(content.attrib['l']),eval(content.attrib['v']),content.attrib['d']] for content in contents]
 	todaydate = date.today().strftime('%Y-%m-%d')
-	if todaydate != items[-1][-1]:
-		latest = grabRealTimeStock(_stockid)
+	if todaydate != items[-1][-1] and CheckDate(items[-1][-1]):
+		latest = GrabRealTimeStock(_stockid)
 		if latest[-1] == todaydate:
 			items.append(latest)		
 	return items
@@ -108,8 +108,7 @@ def GetColumn(Array, column):
 	return [itemgetter(column)(row) for row in Array]
 
 def GetPart(indices, List):
-	return [List[idx] for idx in indices]
-	
+	return [List[idx] for idx in indices]	
 	
 def MovingAverage(Array, idx, width):
 	length = len(Array)
@@ -142,7 +141,8 @@ def FindZero(List):
 	npList = np.array(List)
 	npL_S1 = np.array(L_S1)
 	multi = npList*npL_S1
-	indices = list((multi < 0).nonzero()[0])	
+	indices = list((multi < 0).nonzero()[0])
+	indices = [index if abs(List[index])<abs(List[index+1]) else index+1 for index in indices]
 	return indices
 	
 def FindClose(List):
@@ -211,15 +211,18 @@ def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date, check = True):
 	DIFF = CalcDiff(DIF)
 	AMADIFF = CalcDiff(AMA)
 	DFZeros = FindZero(DIFF)
+	DIFAfterZero = DIF[zero:]
+	MaxDIF, MaxIndx = max( (v, i) for i, v in enumerate(DIFAfterZero) )		
 	C0 = CheckDate(_date) if check else True
-	C1 = 0<DIF[last_ndx]<0.03*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
-	C2 = 0<DIF[DFZeros[-1]]<0.02*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
+	C1 = 0<DIF[last_ndx]<0.02*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
+	C2 = 0<DIF[DFZeros[-1]]<0.01*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
 	C3 = sum(DIF[zero:]) > 0
 	C4 = 4<(last_ndx - zero)<60 and (last_ndx - DFZeros[-1])<2 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
 	C5 = DIFF[zero] > 0
 	C6 = DIFF[last_ndx] >= 0
 	C7 = AMADIFF[last_ndx] > 0
-	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]	
+	C8 = MaxDIF > 0.03*Close[zero+MaxIndx]
+	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]	
 	return Rule	
 
 def RuleDoubleQuantity(Prices, Volumes,_date, check = True):
@@ -231,7 +234,8 @@ def RuleDoubleQuantity(Prices, Volumes,_date, check = True):
 	C1 = False not in [ R>2.0*MeanV for R in RecentV[-3:]]
 	C2 = MaxIndx >= 30
 	C3 = RecentP[1] > RecentP[0] and RecentP[3] > RecentP[1]
-	Rule = False not in [C0,C1,C2,C3]	
+	C4 = 0.07<= (RecentP[3] - RecentP[0])/RecentP[0] <=0.1
+	Rule = False not in [C0,C1,C2,C3,C4]	
 	return Rule	
 	
 def RuleEXPMA(List, last_ndx, _date):
@@ -272,7 +276,7 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 		temp = datetime.now()		
 		try:
 			stockname, stockid = StockQuery(id)
-			items = StockGrab(stockid, begin_date_str,end_date_str )		
+			items = GrabStock(stockid, begin_date_str,end_date_str )		
 			datex = GetColumn(items, 5)		
 			MACluster = CalcMA(items)		
 			[DMA, AMA, DIF] = CalcDMA(items)		
@@ -306,14 +310,13 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 
 			# Draw Vol-fig
 			# plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r')
-			# plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g')
-			
+			# plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g')			
 
 			Cross = RuleGoldCross(DMA, AMA, zero_ndx[-3:], idx[-1], datex[-1])
 			Kiss = RuleGoldKiss(DMA, AMA, zero_ndx[-1], Close, idx[-1], datex[-1])		
 			GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
-			DoubleQuantity = RuleDoubleQuantity(Close, Volumes, datex[-1])
-			for ndx,item in enumerate([Cross, Kiss, GoldBar,DoubleQuantity]):
+			DbleQuty = RuleDoubleQuantity(Close, Volumes, datex[-1])
+			for ndx,item in enumerate([Cross, Kiss, GoldBar,DbleQuty]):
 				if item:
 					RuleFolder = RuleFolders[ndx]				
 					Percent = RisingPercent(items)
@@ -367,7 +370,7 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 					ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
 					ax.set_xlim([id_start,idx[-1]])				
 					# plt.show()
-					goldstock = '%s - %s - %s'%(stockname,stockid,RuleFolder[4:])
+					goldstock = '{0:8}- {1} {2}'.format(RuleFolder[4:],stockid[2:],stockname.encode('utf-8'))
 					Result.append(goldstock)
 					try:
 						plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname,datex[zero_ndx[-1]]), dpi=100)
@@ -384,6 +387,6 @@ if __name__ == '__main__':
 	begin_date = '20140101'
 	end_date = date.today().strftime('%Y%m%d')
 	Result, folder = GoldSeeker(heart, begin_date, end_date)
-	pushStocks(Result,folder)
-	pushwithFetion('\n'.join(Result),['13788976646']) # ,'13601621490'
-			
+	pushwithFetion('\n'.join(sorted(Result)),['13788976646','13601621490']) # 
+	pushStocks(sorted(Result),folder)
+
