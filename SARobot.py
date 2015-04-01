@@ -24,7 +24,7 @@ DIFclr = '#0066FF'
 VARclr = '#3300FF'
 EXP1clr = '#FF00FF'
 EXP2clr = '#3300CC'
-RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleGoldBar']
+RuleFolders = [u'RuleCross',u'RuleKiss',u'RuleGoldBar',u'RuleDoubleQuantity']
 Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
 
 def grabRealTimeStock(_stockid):
@@ -222,6 +222,18 @@ def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date, check = True):
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7]	
 	return Rule	
 
+def RuleDoubleQuantity(Prices, Volumes,_date, check = True):
+	RecentP = Prices[-4:]
+	RecentV = Volumes[-33:]
+	MeanV = np.mean(RecentV[0:30])
+	MaxIndx = max( (v, i) for i, v in enumerate(RecentV) )[1]	
+	C0 = CheckDate(_date) if check else True
+	C1 = False not in [ R>2.0*MeanV for R in RecentV[-3:]]
+	C2 = MaxIndx >= 30
+	C3 = RecentP[1] > RecentP[0] and RecentP[3] > RecentP[1]
+	Rule = False not in [C0,C1,C2,C3]	
+	return Rule	
+	
 def RuleEXPMA(List, last_ndx, _date):
 	EXP1 = CalcExpMA(List,10)
 	EXP2 = CalcExpMA(List,50)
@@ -300,7 +312,8 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 			Cross = RuleGoldCross(DMA, AMA, zero_ndx[-3:], idx[-1], datex[-1])
 			Kiss = RuleGoldKiss(DMA, AMA, zero_ndx[-1], Close, idx[-1], datex[-1])		
 			GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
-			for ndx,item in enumerate([Cross, Kiss, GoldBar]):
+			DoubleQuantity = RuleDoubleQuantity(Close, Volumes, datex[-1])
+			for ndx,item in enumerate([Cross, Kiss, GoldBar,DoubleQuantity]):
 				if item:
 					RuleFolder = RuleFolders[ndx]				
 					Percent = RisingPercent(items)
@@ -372,5 +385,5 @@ if __name__ == '__main__':
 	end_date = date.today().strftime('%Y%m%d')
 	Result, folder = GoldSeeker(heart, begin_date, end_date)
 	pushStocks(Result,folder)
-	pushwithFetion('\n'.join(Result),['13788976646','13601621490'])
+	pushwithFetion('\n'.join(Result),['13788976646']) # ,'13601621490'
 			
