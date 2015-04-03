@@ -2,16 +2,17 @@
 import os
 import re
 import time
-from datetime import datetime,timedelta,date
 import requests
-from lxml import etree
+import pushybullet as pb
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
-import numpy as np
+from lxml import etree
+from datetime import datetime,timedelta,date
 from operator import itemgetter, div, sub
 from StockList import stock
-import pushybullet as pb
 from PyFetion import *
+from PhoneList import Targets
 
 font = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=14) 
 M5clr  = '#0000CC'
@@ -53,11 +54,21 @@ def pushStocks(list, title):
 		pass
 		return False
 		
-def pushwithFetion(msg, sendto):
+def pushwithFetion(msglist, sendto):
 	phone = PyFetion('13788976646', 'a5214496','TCP',debug=False)
 	phone.login(FetionHidden)
-	for item in sendto:
-		phone.send_sms(msg,item)
+	try:
+		if len(msglist)>15:
+			firstpart = msglist[0:15]
+			secondpart = msglist[15:]
+			phone.send_sms('\n'.join(firstpart),sendto)
+			phone.send_sms('\n'.join(secondpart),sendto)
+		elif len(msglist)>0:
+			phone.send_sms('\n'.join(msglist),sendto)
+		else:
+			pass
+	except:
+		print 'Input msglist is empty.'
 	
 def CheckDate(_date):
 	today = date.today()
@@ -199,7 +210,7 @@ def RuleGoldCross(DMA, AMA, zeros, last_ndx, _date, check = True):
 	C2 = sum(DIF[zeros[0]:zeros[1]])>0
 	C3 = sum(DIF[zeros[1]:zeros[2]])<0
 	C4 = sum(DIF[zeros[0]:zeros[2]])>0
-	C5 = last_ndx - zeros[2] < 2
+	C5 = last_ndx - zeros[2] < 1
 	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
 	C7 = (zeros[2] - zeros[1]) < 10
 	C8 = AMADIFF[last_ndx] > 0
@@ -207,7 +218,7 @@ def RuleGoldCross(DMA, AMA, zeros, last_ndx, _date, check = True):
 	return Rule	
 	
 def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date, check = True):
-	DIF = map(sub, DMA , AMA)	
+	DIF = map(sub, DMA , AMA)
 	DIFF = CalcDiff(DIF)
 	AMADIFF = CalcDiff(AMA)
 	DFZeros = FindZero(DIFF)
@@ -371,7 +382,7 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 					ax.set_xlim([id_start,idx[-1]])				
 					# plt.show()
 					goldstock = '{0:8}- {1} {2}'.format(RuleFolder[4:],stockid[2:],stockname.encode('utf-8'))
-					Result.append(goldstock)
+					Result.append((goldstock,AMA[-1]))
 					try:
 						plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname,datex[zero_ndx[-1]]), dpi=100)
 					except:
@@ -382,11 +393,26 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 			print str(e)+ ' when grabing stock:' + str(id)
 	return Result, folder
 
+def SortList(TupleList):
+	OrderedResult = sorted(TupleList, key=itemgetter(1))
+	AMAOrderedResult = map(itemgetter(0), OrderedResult)
+	OrderedResult = sorted(AMAOrderedResult,key=lambda x:x[0][0])
+	return OrderedResult
+	
 if __name__ == '__main__':
 	heart = GetStockList()
 	begin_date = '20140101'
 	end_date = date.today().strftime('%Y%m%d')
 	Result, folder = GoldSeeker(heart, begin_date, end_date)
-	pushwithFetion('\n'.join(sorted(Result)),['13788976646','13601621490']) # 
-	pushStocks(sorted(Result),folder)
+	OrderedResult = SortList(Result)	
+	for key,value in Targets.items():
+		if value == 'A':
+			pushwithFetion(OrderedResult,key)
+			pushStocks(OrderedResult,folder)
+		elif value == 'D':
+			FilterResult = [u'======DMA Kiss/Cross======']+[item for item in OrderedResult if item[0:1]=='Dm']
+			pushwithFetion(FilterResult,key)
+		else:
+			print 'No message pushed for this contact.'			
+
 
