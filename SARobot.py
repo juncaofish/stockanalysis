@@ -19,13 +19,13 @@ M5clr  = '#0000CC'
 M10clr = '#FFCC00'
 M20clr = '#CC6699'
 M30clr = '#009966'
-DMAclr = '#000000'
+DDDclr = '#000000'
 AMAclr = '#FF0033'
-DIFclr = '#0066FF'
+DMAclr = '#0066FF'
 VARclr = '#3300FF'
 EXP1clr = '#FF00FF'
 EXP2clr = '#3300CC'
-RuleFolders = [u'RuleDmacrs',u'RuleDmakis',u'RuleGoldbar',u'RuleDblQaty']
+RuleFolders = [u'RuleDmacrs',u'RuleDmakis',u'RuleGoldbar',u'RuleDblQaty',u'RuleTwine']
 Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
 
 def mkFolder():	
@@ -93,7 +93,7 @@ def GrabRealTimeStock(_stockid):
 	# Return Open/Close/High/Low/volume/Date
 	return [eval(infos[1]),eval(infos[3]),eval(infos[4]),eval(infos[5]),eval(infos[8])/100,infos[30]] 
 	
-def GrabStock(_stockid, begin_date , end_date_str):
+def GrabStock(_stockid, begin_date , end_date_str, grabReal = False):
 	url = 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=%s&end_date=%s&begin_date=%s' 
 	_url = url%(_stockid, end_date_str, begin_date)
 	r = requests.get(_url, headers = Headers)
@@ -101,7 +101,7 @@ def GrabStock(_stockid, begin_date , end_date_str):
 	contents = page.xpath(u'/control/content')
 	items = [[eval(content.attrib['o']),eval(content.attrib['c']),eval(content.attrib['h']),eval(content.attrib['l']),eval(content.attrib['v']),content.attrib['d']] for content in contents]
 	todaydate = date.today().strftime('%Y-%m-%d')
-	if todaydate != items[-1][-1] and CheckDate(items[-1][-1]):
+	if todaydate != items[-1][-1] and CheckDate(items[-1][-1]) and grabReal:
 		latest = GrabRealTimeStock(_stockid)
 		if latest[-1] == todaydate:
 			items.append(latest)		
@@ -185,11 +185,11 @@ def CalcMA(Array):
 	return MACluster
 
 def CalcDMA(Array, Short = 5, Long = 89, Middle = 34):
-	DMA = map(sub, MovingAverage(Array, 1, Short) , MovingAverage(Array, 1, Long))
-	AMA = MovingAverage(DMA, 0, Middle)
-	DIF = map(sub, DMA , AMA)
+	DDD = map(sub, MovingAverage(Array, 1, Short) , MovingAverage(Array, 1, Long))
+	AMA = MovingAverage(DDD, 0, Middle)
+	DMA = map(sub, DDD , AMA)
 	# DMACluster = {'DMA':DMA, 'AMA':AMA, 'DIF':DIF}
-	return DMA, AMA, DIF
+	return DDD, AMA, DMA
 
 def RuleGoldBar(Prices, Volumes,_date, check = True):
 	RecentP = Prices[-5:]
@@ -201,40 +201,55 @@ def RuleGoldBar(Prices, Volumes,_date, check = True):
 	Rule = False not in [C0,C1,C2,C3]
 	return Rule
 	
-def RuleGoldCross(DMA, AMA, zeros, last_ndx, _date, check = True):
-	DIF = map(sub, DMA , AMA)
-	DIFF = CalcDiff(DIF)
-	AMADIFF = CalcDiff(AMA)
+def RuleGoldCross(DDD, AMA, zeros, last_ndx, _date, check = True):
+	DMA = map(sub, DDD , AMA)
+	DIFF = CalcDiff(DMA)
 	C0 = CheckDate(_date) if check else True
-	C1 = DIF[last_ndx]>0
-	C2 = sum(DIF[zeros[0]:zeros[1]])>0
-	C3 = sum(DIF[zeros[1]:zeros[2]])<0
-	C4 = sum(DIF[zeros[0]:zeros[2]])>0
-	C5 = last_ndx - zeros[2] < 1
+	C1 = DMA[last_ndx]>0
+	C2 = sum(DMA[zeros[0]:zeros[1]])>0
+	C3 = sum(DMA[zeros[1]:zeros[2]])<=0
+	print sum(DMA[zeros[1]:zeros[2]])
+	C4 = sum(DMA[zeros[0]:zeros[2]])>0
+	C5 = last_ndx - zeros[2] < 2
+	print last_ndx - zeros[2] 
 	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
-	C7 = (zeros[2] - zeros[1]) < 10
-	C8 = AMADIFF[last_ndx] > 0
+	C7 = (zeros[2] - zeros[1]) < 15
+	C8 = AMA[zeros[2]] - AMA[zeros[1]] >= 0 or AMA[zeros[2]] - AMA[zeros[0]] > 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]
+	print [C0,C1,C2,C3,C4,C5,C6,C7,C8]
 	return Rule	
 	
-def RuleGoldKiss(DMA, AMA, zero, Close, last_ndx, _date, check = True):
-	DIF = map(sub, DMA , AMA)
-	DIFF = CalcDiff(DIF)
+def RuleGoldKiss(DDD, AMA, zero, Close, last_ndx, _date, check = True):
+	DMA = map(sub, DDD , AMA)
+	DIFF = CalcDiff(DMA)
 	AMADIFF = CalcDiff(AMA)
 	DFZeros = FindZero(DIFF)
-	DIFAfterZero = DIF[zero:]
-	MaxDIF, MaxIndx = max( (v, i) for i, v in enumerate(DIFAfterZero) )		
+	DMAAfterZero = DMA[zero:]
+	MaxDMA, MaxIndx = max( (v, i) for i, v in enumerate(DMAAfterZero) )		
 	C0 = CheckDate(_date) if check else True
-	C1 = 0<DIF[last_ndx]<0.02*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
-	C2 = 0<DIF[DFZeros[-1]]<0.01*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
-	C3 = sum(DIF[zero:]) > 0
-	C4 = 4<(last_ndx - zero)<60 and (last_ndx - DFZeros[-1])<2 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
+	C1 = 0<DMA[last_ndx]<0.04*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
+	C2 = 0<DMA[DFZeros[-1]]<0.02*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
+	C3 = MaxDMA > 0.03*Close[zero+MaxIndx]
+	C4 = 5<=(last_ndx - zero)<=60 and (last_ndx - DFZeros[-1])<=1 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
 	C5 = DIFF[zero] > 0
 	C6 = DIFF[last_ndx] >= 0
-	C7 = AMADIFF[last_ndx] > 0
-	C8 = MaxDIF > 0.03*Close[zero+MaxIndx]
+	C7 = AMADIFF[last_ndx] > 0 or AMA[DFZeros[-1]]-AMA[zero] >0
+	C8 = sum(DMA[zero:]) > 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]	
+	print [C0,C1,C2,C3,C4,C5,C6,C7,C8],'kiss'
 	return Rule	
+
+def RuleGoldTwine(DDD, AMA, Close, _date, check=True):
+	DMA = map(sub, DDD, AMA)
+	Recent = DMA[-8:]
+	threshold = 0.02
+	C0 = True #CheckDate(_date) if check else True
+	C1 = False not in [abs(item) < threshold*price for item, price in zip(Recent,Close)]
+	Rule = False not in [C0, C1]
+	return Rule
+	
+def RuleGoldWave(DDD, AMA, zero, Close, last_ndx, _date, check = True):
+	pass	
 
 def RuleDoubleQuantity(Prices, Volumes,_date, check = True):
 	RecentP = Prices[-4:]
@@ -290,9 +305,9 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 			items = GrabStock(stockid, begin_date_str,end_date_str )		
 			datex = GetColumn(items, 5)		
 			MACluster = CalcMA(items)		
-			[DMA, AMA, DIF] = CalcDMA(items)		
-			zero_ndx = FindZero(DIF)
-			zero_pts = GetPart(zero_ndx, DIF)
+			[DDD, AMA, DMA] = CalcDMA(items)		
+			zero_ndx = FindZero(DMA)
+			zero_pts = GetPart(zero_ndx, DMA)
 			length = len(items)
 			idx = xrange(length)
 			emp = ['']*length
@@ -323,11 +338,12 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 			# plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r')
 			# plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g')			
 
-			Cross = RuleGoldCross(DMA, AMA, zero_ndx[-3:], idx[-1], datex[-1])
-			Kiss = RuleGoldKiss(DMA, AMA, zero_ndx[-1], Close, idx[-1], datex[-1])		
+			Cross = RuleGoldCross(DDD, AMA, zero_ndx[-3:], idx[-1], datex[-1])
+			Kiss = RuleGoldKiss(DDD, AMA, zero_ndx[-1], Close, idx[-1], datex[-1])		
 			GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
 			DbleQuty = RuleDoubleQuantity(Close, Volumes, datex[-1])
-			for ndx,item in enumerate([Cross, Kiss, GoldBar,DbleQuty]):
+			Twine = RuleGoldTwine(DDD, AMA, Close, datex[-1])
+			for ndx,item in enumerate([Cross, Kiss, GoldBar,DbleQuty,Twine]):
 				if item:
 					RuleFolder = RuleFolders[ndx]				
 					Percent = RisingPercent(items)
@@ -359,7 +375,7 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 					
 					plt.subplot(3, 1, 2)
 					plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
-					plt.plot(idx,DMA, DMAclr, AMA, AMAclr ,DIF, DIFclr)
+					plt.plot(idx,DDD, DDDclr, AMA, AMAclr ,DMA, DMAclr)
 					#plt.plot(idx, DMACluster['DIFF'],'g')
 					#plt.plot(idx, CalcDiff(DMACluster['DIFF']),'k')
 					plt.plot(zero_ndx[-3:], zero_pts[-3:], 'ro')			
@@ -368,8 +384,8 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 					ax.autoscale(enable=True, axis='both', tight=True)			
 					ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
 					ax.set_xlim([id_start,idx[-1]])				
-					ax.set_ylim(min(DIF[id_start:] + AMA[id_start:] + DMA[id_start:]),\
-					max(DIF[id_start:] + AMA[id_start:]+ DMA[id_start:]))
+					ax.set_ylim(min(DMA[id_start:] + AMA[id_start:] + DDD[id_start:]),\
+					max(DMA[id_start:] + AMA[id_start:]+ DDD[id_start:]))
 					
 					plt.subplot(3, 1, 3)
 					plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r',align="center")
@@ -398,7 +414,7 @@ def SortList(TupleList):
 	AMAOrderedResult = map(itemgetter(0), OrderedResult)
 	OrderedResult = sorted(AMAOrderedResult,key=lambda x:x[0][0])
 	return OrderedResult
-	
+
 if __name__ == '__main__':
 	heart = GetStockList()
 	begin_date = '20140101'
