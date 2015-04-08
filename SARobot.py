@@ -123,10 +123,13 @@ def GetPart(indices, List):
 	
 def MovingAverage(Array, idx, width):
 	length = len(Array)
-	if type(Array[0]) == type([]):
-		return [sum([itemgetter(idx)(elem) for elem in Array[i-width+1:i+1]])/float(width) if i >= width-1 else Array[i][idx] for i in xrange(length)]
-	else: 
-		return [sum( Array[i-width+1:i+1] if i >= width-1 else (Array[0:i]+[Array[i]]*(width-i)))/float(width) for i in xrange(length)]
+	if length < width:
+		raise Exception("The width exceeds maximum length of stocks ")
+	else:
+		if type(Array[0]) == type([]):
+			return [sum([itemgetter(idx)(elem) for elem in Array[i-width+1:i+1]])/float(width) if i >= width-1 else Array[i][idx] for i in xrange(length)]
+		else: 
+			return [sum( Array[i-width+1:i+1] if i >= width-1 else (Array[0:i]+[Array[i]]*(width-i)))/float(width) for i in xrange(length)]
 	
 def CalcExpMA(List, Period):
 	length = len(List)
@@ -208,15 +211,12 @@ def RuleGoldCross(DDD, AMA, zeros, last_ndx, _date, check = True):
 	C1 = DMA[last_ndx]>0
 	C2 = sum(DMA[zeros[0]:zeros[1]])>0
 	C3 = sum(DMA[zeros[1]:zeros[2]])<=0
-	print sum(DMA[zeros[1]:zeros[2]])
 	C4 = sum(DMA[zeros[0]:zeros[2]])>0
 	C5 = last_ndx - zeros[2] < 2
-	print last_ndx - zeros[2] 
 	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
 	C7 = (zeros[2] - zeros[1]) < 15
 	C8 = AMA[zeros[2]] - AMA[zeros[1]] >= 0 or AMA[zeros[2]] - AMA[zeros[0]] > 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]
-	print [C0,C1,C2,C3,C4,C5,C6,C7,C8]
 	return Rule	
 	
 def RuleGoldKiss(DDD, AMA, zero, Close, last_ndx, _date, check = True):
@@ -236,7 +236,6 @@ def RuleGoldKiss(DDD, AMA, zero, Close, last_ndx, _date, check = True):
 	C7 = AMADIFF[last_ndx] > 0 or AMA[DFZeros[-1]]-AMA[zero] >0
 	C8 = sum(DMA[zero:]) > 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]	
-	print [C0,C1,C2,C3,C4,C5,C6,C7,C8],'kiss'
 	return Rule	
 
 def RuleGoldTwine(DDD, AMA, Close, _date, check=True):
@@ -426,7 +425,10 @@ if __name__ == '__main__':
 			pushwithFetion(OrderedResult,key)
 			pushStocks(OrderedResult,folder)
 		elif value == 'D':
-			FilterResult = [u'======DMA Kiss/Cross======']+[item for item in OrderedResult if item[0:1]=='Dm']
+			FilterResult = [item for item in OrderedResult if item[0:1]=='D']
+			pushwithFetion(FilterResult,key)
+		elif value == 'M':
+			FilterResult = [u'======DMA Kiss/Cross======']+[item for item in OrderedResult if item[1]=='m']
 			pushwithFetion(FilterResult,key)
 		else:
 			print 'No message pushed for this contact.'			
