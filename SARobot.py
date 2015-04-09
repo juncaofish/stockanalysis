@@ -28,7 +28,7 @@ EXP2clr = '#3300CC'
 RuleFolders = [u'RuleDmacrs',u'RuleDmakis',u'RuleGoldbar',u'RuleDblQaty',u'RuleTwine']
 Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
 
-def mkFolder():	
+def CreateFolder():	
 	currentpath  = os.path.realpath(__file__)
 	basedir = os.path.dirname(currentpath)
 	folder = datetime.today().strftime('%Y%m%d')
@@ -41,34 +41,32 @@ def mkFolder():
 			os.mkdir(subfolder)
 	return folderpath,folder
 
-def pushStocks(list, title):
-	API_KEY = "pdaXjHTgQJ9s5sZRdfi93BMTz4CjICGl"
+def PushwithPb(_list, _title):
+	KEY = "pdaXjHTgQJ9s5sZRdfi93BMTz4CjICGl"
 	try:
-		api = pb.PushBullet(API_KEY)
+		api = pb.PushBullet(KEY)
 		device = api['LGE Nexus 4']
 		# print device.nickname
-		push = pb.ListPush(list, title)
+		push = pb.ListPush(_list, _title)
 		api.push(push, device)
-		return True
 	except Exception as e:
-		pass
-		return False
+		print str(e) + ' when pushing msg with pushbullet.'
 		
-def pushwithFetion(msglist, sendto):
+def PushwithFetion(_msglist, _sendto):
 	phone = PyFetion('13788976646', 'a5214496','TCP',debug=False)
 	phone.login(FetionHidden)
 	try:
-		if len(msglist)>15:
-			firstpart = msglist[0:15]
-			secondpart = msglist[15:]
-			phone.send_sms('\n'.join(firstpart),sendto)
-			phone.send_sms('\n'.join(secondpart),sendto)
-		elif len(msglist)>0:
-			phone.send_sms('\n'.join(msglist),sendto)
+		if len(_msglist)>15:
+			firstpart = _msglist[0:15]
+			secondpart = _msglist[15:]
+			phone.send_sms('\n'.join(firstpart), _sendto)
+			phone.send_sms('\n'.join(secondpart), _sendto)
+		elif len(_msglist)>0:
+			phone.send_sms('\n'.join(_msglist), _sendto)
 		else:
 			pass
-	except:
-		print 'Input msglist is empty.'
+	except Exception as e:
+		print str(e) + ' when pushing the msg with Fetion.'
 	
 def CheckDate(_date):
 	today = date.today()
@@ -93,169 +91,169 @@ def GrabRealTimeStock(_stockid):
 	# Return Open/Close/High/Low/volume/Date
 	return [eval(infos[1]),eval(infos[3]),eval(infos[4]),eval(infos[5]),eval(infos[8])/100,infos[30]] 
 	
-def GrabStock(_stockid, begin_date , end_date_str, grabReal = False):
-	url = 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=%s&end_date=%s&begin_date=%s' 
-	_url = url%(_stockid, end_date_str, begin_date)
+def GrabStock(_stockid, _begin , _end, _grabReal = False):
+	Url = 'http://biz.finance.sina.com.cn/stock/flash_hq/kline_data.php?symbol=%s&end_date=%s&begin_date=%s' 
+	_url = Url%(_stockid, _end, _begin)
 	r = requests.get(_url, headers = Headers)
 	page = etree.fromstring(r.text.encode('utf-8'))
 	contents = page.xpath(u'/control/content')
 	items = [[eval(content.attrib['o']),eval(content.attrib['c']),eval(content.attrib['h']),eval(content.attrib['l']),eval(content.attrib['v']),content.attrib['d']] for content in contents]
 	todaydate = date.today().strftime('%Y-%m-%d')
-	if todaydate != items[-1][-1] and CheckDate(items[-1][-1]) and grabReal:
+	if todaydate != items[-1][-1] and CheckDate(items[-1][-1]) and _grabReal:
 		latest = GrabRealTimeStock(_stockid)
 		if latest[-1] == todaydate:
 			items.append(latest)		
 	return items
 
-def StockQuery(stockname): 
-	m = re.match(r'\d{6}', stockname)
-	stockid = stockname if m else stock.get(stockname)
-	stockname = stock.get(stockname) if m else stockname
-	stock_pre = 'sh' if stockid[0] == '6' else 'sz'
-	stockid = stock_pre + stockid
+def StockQuery(_stockname): 
+	m = re.match(r'\d{6}', _stockname)
+	stockid = _stockname if m else stock.get(_stockname)
+	stockname = stock.get(_stockname) if m else _stockname
+	stockloc = 'sh' if stockid[0] == '6' else 'sz'
+	stockid = stockloc + stockid
 	return stockname.decode('utf-8'), stockid	
 	
-def GetColumn(Array, column):
-	return [itemgetter(column)(row) for row in Array]
+def GetColumn(_array, _column):
+	return [itemgetter(_column)(row) for row in _array]
 
-def GetPart(indices, List):
-	return [List[idx] for idx in indices]	
+def GetPart(_indices, _list):
+	return [_list[idx] for idx in _indices]	
 	
-def MovingAverage(Array, idx, width):
-	length = len(Array)
-	if length < width:
+def MovingAverage(_array, _idx, _width):
+	length = len(_array)
+	if length < _width:
 		raise Exception("The width exceeds maximum length of stocks ")
 	else:
-		if type(Array[0]) == type([]):
-			return [sum([itemgetter(idx)(elem) for elem in Array[i-width+1:i+1]])/float(width) if i >= width-1 else Array[i][idx] for i in xrange(length)]
+		if type(_array[0]) == type([]):
+			return [sum([itemgetter(_idx)(elem) for elem in _array[i-_width+1:i+1]])/float(_width) if i >= _width-1 else _array[i][_idx] for i in xrange(length)]
 		else: 
-			return [sum( Array[i-width+1:i+1] if i >= width-1 else (Array[0:i]+[Array[i]]*(width-i)))/float(width) for i in xrange(length)]
+			return [sum( _array[i-_width+1:i+1] if i >= _width-1 else (_array[0:i]+[_array[i]]*(_width-i)))/float(_width) for i in xrange(length)]
 	
-def CalcExpMA(List, Period):
-	length = len(List)
-	def ExpMA(List, n, N):
-		return List[0] if n == 0 else (List[n]*2.0 + (N - 1.0)*ExpMA(List, n-1,N))/( N +1.0)
-	ExpMA = [ExpMA(List,i,Period) for i in xrange(length)]
+def CalcExpMA(_list, _period):
+	length = len(_list)
+	def ExpMA(_list, n, N):
+		return _list[0] if n == 0 else (_list[n]*2.0 + (N - 1.0)*ExpMA(_list, n-1,N))/( N +1.0)
+	ExpMA = [ExpMA(_list,i,_period) for i in xrange(length)]
 	# ExpMA2 = [ExpMA(List,i,50) for i in xrange(length)]
 	return ExpMA
 		
-def RisingPercent(Array):
-	length = len(Array)
-	return [100.0*(itemgetter(1)(Array[i]) - itemgetter(1)(Array[i-1]))/itemgetter(1)(Array[i-1]) if i >=1 else 0 for i in xrange(length)]
+def RisingPercent(_array):
+	length = len(_array)
+	return [100.0*(itemgetter(1)(_array[i]) - itemgetter(1)(_array[i-1]))/itemgetter(1)(_array[i-1]) if i >=1 else 0 for i in xrange(length)]
 	
-def CalcVar(Array):
-	Var = [np.var(GetColumn(Array, i)) for i in xrange(len(Array[0]))]
-	return Var
+def CalcVar(_array):
+	varvalue = [np.var(GetColumn(_array, i)) for i in xrange(len(_array[0]))]
+	return varvalue
 	
-def NormVol(List):
-	return [10.0*elem/max(List) for elem in List]
+def NormVol(_list):
+	return [10.0*elem/max(_list) for elem in _list]
 
-def FindZero(List):
-	L_S1 = List[1:]+[List[-1]]
-	npList = np.array(List)
+def FindZero(_list):
+	L_S1 = _list[1:]+[_list[-1]]
+	npList = np.array(_list)
 	npL_S1 = np.array(L_S1)
 	multi = npList*npL_S1
 	indices = list((multi < 0).nonzero()[0])
-	indices = [index if abs(List[index])<abs(List[index+1]) else index+1 for index in indices]
+	indices = [index if abs(_list[index])<abs(_list[index+1]) else index+1 for index in indices]
 	return indices
 	
-def FindClose(List):
+def FindClose(_list):
 	eps = 0.02
-	npList = np.array(List)
+	npList = np.array(_list)
 	indices = list((abs(npList)<eps).nonzero()[0])
 	return indices
 	
-def CalcDiff(List):
-	List1 = List[1:]+[List[-1]]
-	List2 = [List[0]]+List[0:-1]
-	Diff = list(np.array(map(sub, List1, List2))*5.0)
+def CalcDiff(_list):
+	L1 = _list[1:]+[_list[-1]]
+	L2 = [_list[0]]+_list[0:-1]
+	Diff = list(np.array(map(sub, L1, L2))*5.0)
 	return Diff
 
-def CalcInteg(List):
-	return [sum(List[0:i+1]) for i,elem in enumerate(List)]
+def CalcInteg(_list):
+	return [sum(_list[0:i+1]) for i,elem in enumerate(_list)]
 	
 def GetStockList():		
 	return [id for id, sname in stock.items() if re.match(r'\d{6}', id)]
 
-def CalcMA(Array):
-	MA1 = MovingAverage(Array, 1, 1)
-	MA5 = MovingAverage(Array, 1, 5)
-	MA10 = MovingAverage(Array, 1, 10)
-	MA20 = MovingAverage(Array, 1, 20)
-	MA30 = MovingAverage(Array, 1, 30)
+def CalcMA(_array):
+	MA1 = MovingAverage(_array, 1, 1)
+	MA5 = MovingAverage(_array, 1, 5)
+	MA10 = MovingAverage(_array, 1, 10)
+	MA20 = MovingAverage(_array, 1, 20)
+	MA30 = MovingAverage(_array, 1, 30)
 	VAR = CalcVar( [MA1,MA5, MA10, MA20, MA30] )	
 	MACluster = {'MA1':MA1, 'MA5':MA5, 'MA10':MA10, 'MA20':MA20, 'MA30':MA30, 'VAR':VAR}
 	return MACluster
 
-def CalcDMA(Array, Short = 5, Long = 89, Middle = 34):
-	DDD = map(sub, MovingAverage(Array, 1, Short) , MovingAverage(Array, 1, Long))
+def CalcDMA(_array, Short = 5, Long = 89, Middle = 34):
+	DDD = map(sub, MovingAverage(_array, 1, Short) , MovingAverage(_array, 1, Long))
 	AMA = MovingAverage(DDD, 0, Middle)
 	DMA = map(sub, DDD , AMA)
 	# DMACluster = {'DMA':DMA, 'AMA':AMA, 'DIF':DIF}
 	return DDD, AMA, DMA
 
-def RuleGoldBar(Prices, Volumes,_date, check = True):
-	RecentP = Prices[-5:]
-	RecentV = Volumes[-5:]
-	C0 = CheckDate(_date) if check else True
+def RuleGoldBar(_prices, _volumes, _date, _check = True):
+	RecentP = _prices[-5:]
+	RecentV = _volumes[-5:]
+	C0 = CheckDate(_date) if _check else True
 	C1 = RecentP[4]>RecentP[3]>RecentP[2]>RecentP[1]
 	C2 = RecentV[4]<RecentV[3]<RecentV[2]<RecentV[1]
 	C3 = (RecentP[1]-RecentP[0])/RecentP[0]>0.09
 	Rule = False not in [C0,C1,C2,C3]
 	return Rule
 	
-def RuleGoldCross(DDD, AMA, zeros, last_ndx, _date, check = True):
+def RuleGoldCross(DDD, AMA, _zeroNdxs, _lastNdx, _date, _check = True):
 	DMA = map(sub, DDD , AMA)
 	DIFF = CalcDiff(DMA)
-	C0 = CheckDate(_date) if check else True
-	C1 = DMA[last_ndx]>0
-	C2 = sum(DMA[zeros[0]:zeros[1]])>0
-	C3 = sum(DMA[zeros[1]:zeros[2]])<=0
-	C4 = sum(DMA[zeros[0]:zeros[2]])>0
-	C5 = last_ndx - zeros[2] < 2
-	C6 = ((zeros[1] - zeros[0]) - 2*(zeros[2] - zeros[1]))>0
-	C7 = (zeros[2] - zeros[1]) < 15
-	C8 = AMA[zeros[2]] - AMA[zeros[1]] >= 0 or AMA[zeros[2]] - AMA[zeros[0]] > 0
+	C0 = CheckDate(_date) if _check else True
+	C1 = DMA[_lastNdx]>0
+	C2 = sum(DMA[_zeroNdxs[0]:_zeroNdxs[1]])>0
+	C3 = sum(DMA[_zeroNdxs[1]:_zeroNdxs[2]])<=0
+	C4 = sum(DMA[_zeroNdxs[0]:_zeroNdxs[2]])>0
+	C5 = _lastNdx - _zeroNdxs[2] < 2
+	C6 = ((_zeroNdxs[1] - _zeroNdxs[0]) - 2*(_zeroNdxs[2] - _zeroNdxs[1]))>0
+	C7 = (_zeroNdxs[2] - _zeroNdxs[1]) < 15
+	C8 = AMA[_zeroNdxs[2]] - AMA[_zeroNdxs[1]] >= 0 or AMA[_zeroNdxs[2]] - AMA[_zeroNdxs[0]] > 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]
 	return Rule	
 	
-def RuleGoldKiss(DDD, AMA, zero, Close, last_ndx, _date, check = True):
+def RuleGoldKiss(DDD, AMA, _zeroNdx, Close, _lastNdx, _date, _check = True):
 	DMA = map(sub, DDD , AMA)
 	DIFF = CalcDiff(DMA)
 	AMADIFF = CalcDiff(AMA)
 	DFZeros = FindZero(DIFF)
-	DMAAfterZero = DMA[zero:]
+	DMAAfterZero = DMA[_zeroNdx:]
 	MaxDMA, MaxIndx = max( (v, i) for i, v in enumerate(DMAAfterZero) )		
-	C0 = CheckDate(_date) if check else True
-	C1 = 0<DMA[last_ndx]<0.04*Close[last_ndx] # Last day DMA Less than Close_price*1.5%
+	C0 = CheckDate(_date) if _check else True
+	C1 = 0<DMA[_lastNdx]<0.04*Close[_lastNdx] # Last day DMA Less than Close_price*1.5%
 	C2 = 0<DMA[DFZeros[-1]]<0.02*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
-	C3 = MaxDMA > 0.03*Close[zero+MaxIndx]
-	C4 = 5<=(last_ndx - zero)<=60 and (last_ndx - DFZeros[-1])<=1 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
-	C5 = DIFF[zero] > 0
-	C6 = DIFF[last_ndx] >= 0
-	C7 = AMADIFF[last_ndx] > 0 or AMA[DFZeros[-1]]-AMA[zero] >0
-	C8 = sum(DMA[zero:]) > 0
+	C3 = MaxDMA > 0.03*Close[_zeroNdx+MaxIndx]
+	C4 = 5<=(_lastNdx - _zeroNdx)<=60 and (_lastNdx - DFZeros[-1])<=1 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
+	C5 = DIFF[_zeroNdx] > 0
+	C6 = DIFF[_lastNdx] >= 0
+	C7 = AMADIFF[_lastNdx] > 0 or AMA[DFZeros[-1]]-AMA[_zeroNdx] >0
+	C8 = sum(DMA[_zeroNdx:]) > 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]	
 	return Rule	
 
-def RuleGoldTwine(DDD, AMA, Close, _date, check=True):
+def RuleGoldTwine(DDD, AMA, Close, _date, _check=True):
 	DMA = map(sub, DDD, AMA)
 	Recent = DMA[-8:]
 	threshold = 0.02
-	C0 = True #CheckDate(_date) if check else True
+	C0 = CheckDate(_date) if _check else True
 	C1 = False not in [abs(item) < threshold*price for item, price in zip(Recent,Close)]
 	Rule = False not in [C0, C1]
 	return Rule
 	
-def RuleGoldWave(DDD, AMA, zero, Close, last_ndx, _date, check = True):
+def RuleGoldWave(DDD, AMA, _zeroNdx, Close, _lastNdx, _date, _check = True):
 	pass	
 
-def RuleDoubleQuantity(Prices, Volumes,_date, check = True):
-	RecentP = Prices[-4:]
-	RecentV = Volumes[-33:]
+def RuleDoubleQuantity(_prices, _volumes, _date, _check = True):
+	RecentP = _prices[-4:]
+	RecentV = _volumes[-33:]
 	MeanV = np.mean(RecentV[0:30])
 	MaxIndx = max( (v, i) for i, v in enumerate(RecentV) )[1]	
-	C0 = CheckDate(_date) if check else True
+	C0 = CheckDate(_date) if _check else True
 	C1 = False not in [ R>2.0*MeanV for R in RecentV[-3:]]
 	C2 = MaxIndx >= 30
 	C3 = RecentP[1] > RecentP[0] and RecentP[3] > RecentP[1]
@@ -263,14 +261,14 @@ def RuleDoubleQuantity(Prices, Volumes,_date, check = True):
 	Rule = False not in [C0,C1,C2,C3,C4]	
 	return Rule	
 	
-def RuleEXPMA(List, last_ndx, _date):
-	EXP1 = CalcExpMA(List,10)
-	EXP2 = CalcExpMA(List,50)
+def RuleEXPMA(_list, _lastNdx, _date):
+	EXP1 = CalcExpMA(_list,10)
+	EXP2 = CalcExpMA(_list,50)
 	DIFEXP = map(sub, EXP1, EXP2)
 	EXPZeros = FindZero(DIFEXP)	
 	C0 = CheckDate(_date)
-	C1 = DIFEXP[last_ndx]>0
-	C2 = (last_ndx - EXPZeros[-1])<5
+	C1 = DIFEXP[_lastNdx]>0
+	C2 = (_lastNdx - EXPZeros[-1])<5
 	Rule = False not in [C0,C1,C2]
 	return Rule
 	
@@ -293,15 +291,15 @@ def CalcBoll(Close,N=89, k=2):
 	Band = map(lambda x,y,z:(x-z)/(float(y) if y!=0 else 1.0), UP, MD, DN)
 	return MA, UP, DN, b, Band
 
-def GoldSeeker(heart, begin_date_str, end_date_str):
+def GoldSeeker(_stocks, _beginDateStr, _endDateStr):
 	Result = []
 	start = datetime.now()
-	baseFolder, folder = mkFolder()
-	for num,id in enumerate(heart):
+	baseFolder, folder = CreateFolder()
+	for num,id in enumerate(_stocks):
 		temp = datetime.now()		
 		try:
 			stockname, stockid = StockQuery(id)
-			items = GrabStock(stockid, begin_date_str,end_date_str )		
+			items = GrabStock(stockid, _beginDateStr, _endDateStr )		
 			datex = GetColumn(items, 5)		
 			MACluster = CalcMA(items)		
 			[DDD, AMA, DMA] = CalcDMA(items)		
@@ -403,32 +401,32 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 					except:
 						plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname[1:],datex[zero_ndx[-1]]), dpi=100)
 					plt.clf()				
-			print 'Complete %s: %s - %s, Elapsed Time: %s'%(num, stockname,stockid,temp-start)		
+			print 'Complete %s: %s - %s, Elapsed Time: %s'%(num, stockname,stockid,temp-start)
 		except Exception as e:
 			print str(e)+ ' when grabing stock:' + str(id)
 	return Result, folder
 
-def SortList(TupleList):
-	OrderedResult = sorted(TupleList, key=itemgetter(1))
+def SortList(_tupleList):
+	OrderedResult = sorted(_tupleList, key=itemgetter(1))
 	AMAOrderedResult = map(itemgetter(0), OrderedResult)
 	OrderedResult = sorted(AMAOrderedResult,key=lambda x:x[0:4])
 	return OrderedResult
 
 if __name__ == '__main__':
-	heart = GetStockList()
-	begin_date = '20140101'
-	end_date = date.today().strftime('%Y%m%d')
-	Result, folder = GoldSeeker(heart, begin_date, end_date)
-	OrderedResult = SortList(Result)	
+	stocks = GetStockList()
+	begin = '20140101'
+	end = date.today().strftime('%Y%m%d')
+	result, folder = GoldSeeker(stocks, begin, end)
+	OrderedResult = SortList(result)	
 	for key,value in Targets.items():
 		if value == 'A':
-			pushwithFetion(OrderedResult,key)
-			pushStocks(OrderedResult,folder)
+			PushwithFetion(OrderedResult,key)
+			PushwithPb(OrderedResult,folder)
 		elif value == 'D':
-			FilterResult = [item for item in OrderedResult if item[0]=='D']
-			pushwithFetion(FilterResult,key)
+			FilteredResult = [item for item in OrderedResult if item[0]=='D']
+			PushwithFetion(FilteredResult,key)
 		elif value == 'M':
-			FilterResult = [u'======DMA Kiss/Cross======']+[item for item in OrderedResult if item[1]=='m']
-			pushwithFetion(FilterResult,key)
+			FilteredResult = [u'======DMA Kiss/Cross======']+[item for item in OrderedResult if item[1]=='m']
+			PushwithFetion(FilteredResult,key)
 		else:
-			print 'No message pushed for this contact.'		
+			print 'No message pushed for this contact.'
