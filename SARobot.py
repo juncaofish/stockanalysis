@@ -411,7 +411,7 @@ def GoldSeeker(heart, begin_date_str, end_date_str):
 def SortList(TupleList):
 	OrderedResult = sorted(TupleList, key=itemgetter(1))
 	AMAOrderedResult = map(itemgetter(0), OrderedResult)
-	OrderedResult = sorted(AMAOrderedResult,key=lambda x:x[0][0])
+	OrderedResult = sorted(AMAOrderedResult,key=lambda x:x[0:4])
 	return OrderedResult
 
 if __name__ == '__main__':
@@ -425,12 +425,10 @@ if __name__ == '__main__':
 			pushwithFetion(OrderedResult,key)
 			pushStocks(OrderedResult,folder)
 		elif value == 'D':
-			FilterResult = [item for item in OrderedResult if item[0:1]=='D']
+			FilterResult = [item for item in OrderedResult if item[0]=='D']
 			pushwithFetion(FilterResult,key)
 		elif value == 'M':
 			FilterResult = [u'======DMA Kiss/Cross======']+[item for item in OrderedResult if item[1]=='m']
 			pushwithFetion(FilterResult,key)
 		else:
-			print 'No message pushed for this contact.'			
-
-
+			print 'No message pushed for this contact.'		
