@@ -5,6 +5,7 @@ import time
 import requests
 import pushybullet as pb
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 from lxml import etree
@@ -28,11 +29,22 @@ EXP2clr = '#3300CC'
 RuleFolders = [u'RuleDmacrs',u'RuleDmakis',u'RuleGoldbar',u'RuleDblQaty',u'RuleTwine']
 Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
 
-def CreateFolder():	
+def GetIndustry(_stockid):
+	data =  pd.read_csv(os.path.join(BaseDir(), r'data\all.csv'), dtype={'code':'object'}, encoding='GBK')
+	industry = data.ix[data.code==_stockid,['industry']].values[0][0]
+	return industry
+
+def BaseDir():
 	currentpath  = os.path.realpath(__file__)
 	basedir = os.path.dirname(currentpath)
+	return basedir
+	
+def CreateFolder():
+	dailyfolder = os.path.join(BaseDir(), 'daily')
+	if not os.path.exists(dailyfolder):
+		os.mkdir(dailyfolder)	
 	folder = datetime.today().strftime('%Y%m%d')
-	folderpath =os.path.join(basedir, folder)
+	folderpath = os.path.join(dailyfolder, folder)
 	if not os.path.exists(folderpath):
 		os.mkdir(folderpath)
 	for item in RuleFolders:
@@ -55,16 +67,15 @@ def PushwithPb(_list, _title):
 def PushwithFetion(_msglist, _sendto):
 	phone = PyFetion('13788976646', 'a5214496','TCP',debug=False)
 	phone.login(FetionHidden)
+	idx = 1
 	try:
-		if len(_msglist)>15:
-			firstpart = _msglist[0:15]
-			secondpart = _msglist[15:]
-			phone.send_sms('\n'.join(firstpart), _sendto)
-			phone.send_sms('\n'.join(secondpart), _sendto)
-		elif len(_msglist)>0:
-			phone.send_sms('\n'.join(_msglist), _sendto)
-		else:
-			pass
+		while len(_msglist)>10:
+			sendlist = _msglist[0:10]
+			phone.send_sms('\n'.join([str(idx)+':']+sendlist), _sendto)
+			_msglist = _msglist[10:]
+			idx += 1
+			time.sleep(5)
+		phone.send_sms('\n'.join([str(idx)+':']+_msglist), _sendto)	
 	except Exception as e:
 		print str(e) + ' when pushing the msg with Fetion.'
 	
@@ -99,7 +110,7 @@ def GrabStock(_stockid, _begin , _end, _grabReal = False):
 	contents = page.xpath(u'/control/content')
 	items = [[eval(content.attrib['o']),eval(content.attrib['c']),eval(content.attrib['h']),eval(content.attrib['l']),eval(content.attrib['v']),content.attrib['d']] for content in contents]
 	todaydate = date.today().strftime('%Y-%m-%d')
-	if todaydate != items[-1][-1] and CheckDate(items[-1][-1]) and _grabReal:
+	if todaydate != items[-1][-1] and _grabReal:
 		latest = GrabRealTimeStock(_stockid)
 		if latest[-1] == todaydate:
 			items.append(latest)		
@@ -212,7 +223,7 @@ def RuleGoldCross(DDD, AMA, _zeroNdxs, _lastNdx, _date, _check = True):
 	C4 = sum(DMA[_zeroNdxs[0]:_zeroNdxs[2]])>0
 	C5 = _lastNdx - _zeroNdxs[2] < 2
 	C6 = ((_zeroNdxs[1] - _zeroNdxs[0]) - 2*(_zeroNdxs[2] - _zeroNdxs[1]))>0
-	C7 = (_zeroNdxs[2] - _zeroNdxs[1]) < 15
+	C7 = (_zeroNdxs[2] - _zeroNdxs[1]) < 8
 	C8 = AMA[_zeroNdxs[2]] - AMA[_zeroNdxs[1]] >= 0 or AMA[_zeroNdxs[2]] - AMA[_zeroNdxs[0]] > 0
 	Rule = False not in [C0,C1,C2,C3,C4,C5,C6,C7,C8]
 	return Rule	
@@ -238,7 +249,7 @@ def RuleGoldKiss(DDD, AMA, _zeroNdx, Close, _lastNdx, _date, _check = True):
 
 def RuleGoldTwine(DDD, AMA, Close, _date, _check=True):
 	DMA = map(sub, DDD, AMA)
-	Recent = DMA[-8:]
+	Recent = DMA[-10:]
 	threshold = 0.02
 	C0 = CheckDate(_date) if _check else True
 	C1 = False not in [abs(item) < threshold*price for item, price in zip(Recent,Close)]
@@ -299,7 +310,7 @@ def GoldSeeker(_stocks, _beginDateStr, _endDateStr):
 		temp = datetime.now()		
 		try:
 			stockname, stockid = StockQuery(id)
-			items = GrabStock(stockid, _beginDateStr, _endDateStr )		
+			items = GrabStock(stockid, _beginDateStr, _endDateStr)		
 			datex = GetColumn(items, 5)		
 			MACluster = CalcMA(items)		
 			[DDD, AMA, DMA] = CalcDMA(items)		
@@ -394,7 +405,7 @@ def GoldSeeker(_stocks, _beginDateStr, _endDateStr):
 					ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
 					ax.set_xlim([id_start,idx[-1]])				
 					# plt.show()
-					goldstock = '{0:8}- {1} {2}'.format(RuleFolder[4:],stockid[2:],stockname.encode('utf-8'))
+					goldstock = '{0:8}- {1} {2}({3})'.format(RuleFolder[4:],stockid[2:],stockname.encode('utf-8'),GetIndustry(stockid[2:]).encode('utf-8'))
 					Result.append((goldstock,AMA[-1]))
 					try:
 						plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname,datex[zero_ndx[-1]]), dpi=100)
@@ -426,7 +437,7 @@ if __name__ == '__main__':
 			FilteredResult = [item for item in OrderedResult if item[0]=='D']
 			PushwithFetion(FilteredResult,key)
 		elif value == 'M':
-			FilteredResult = [u'======DMA Kiss/Cross======']+[item for item in OrderedResult if item[1]=='m']
+			FilteredResult = [item for item in OrderedResult if item[1]=='m']
 			PushwithFetion(FilteredResult,key)
 		else:
 			print 'No message pushed for this contact.'
