@@ -62,7 +62,7 @@ def PushwithPb(_list, _title):
 		push = pb.ListPush(_list, _title)
 		api.push(push, device)
 	except Exception as e:
-		print str(e) + ' when pushing msg with pushbullet.'
+		print str(e) + ' when pushing the msg with pushbullet.'
 		
 def PushwithFetion(_msglist, _sendto):
 	phone = PyFetion('13788976646', 'a5214496','TCP',debug=False)
@@ -78,7 +78,32 @@ def PushwithFetion(_msglist, _sendto):
 		phone.send_sms('\n'.join([str(idx)+':']+_msglist), _sendto)	
 	except Exception as e:
 		print str(e) + ' when pushing the msg with Fetion.'
-	
+
+def PushwithMail(_msglist, _sendto):
+	import smtplib  
+	from email.MIMEText import MIMEText  
+	from email.Utils import formatdate  
+	from email.Header import Header 
+	smtpHost = 'smtp.sina.cn'
+	fromMail = username = 'nuggetstock@sina.com'  
+	password = 'welcome'
+	subject  = u'[%s] 自动推荐'%datetime.today().strftime('%Y%m%d')
+	body     = '\n'.join(_msglist) 
+	mail = MIMEText(body.encode('utf-8'),'plain','utf-8')  
+	mail['Subject'] = Header(subject,'utf-8')  
+	mail['From'] = fromMail  
+	mail['To'] = ','.join(_sendto)
+	mail['Date'] = formatdate() 
+	try:  
+		smtp = smtplib.SMTP_SSL(smtpHost)  
+		smtp.ehlo()  
+		smtp.login(username,password)
+		smtp.sendmail(fromMail,_sendto,mail.as_string())  
+		smtp.close()  
+		print 'Push to mail successfully.'  
+	except Exception as e:  
+		print str(e) + ' when pushing the msg with Mail.'
+		
 def CheckDate(_date):
 	today = date.today()
 	yesterday = today - timedelta(days=1)
@@ -433,11 +458,14 @@ if __name__ == '__main__':
 		if value == 'A':
 			PushwithFetion(OrderedResult,key)
 			PushwithPb(OrderedResult,folder)
+			PushwithMail(OrderedResult, 'nuggetstock@sina.com')
 		elif value == 'D':
 			FilteredResult = [item for item in OrderedResult if item[0]=='D']
 			PushwithFetion(FilteredResult,key)
+			# PushwithMail(FilteredResult, 'xuanxiaoyi@126.com')
 		elif value == 'M':
 			FilteredResult = [item for item in OrderedResult if item[1]=='m']
 			PushwithFetion(FilteredResult,key)
+			# PushwithMail(FilteredResult, 'nuggetstock@sina.com')
 		else:
 			print 'No message pushed for this contact.'
