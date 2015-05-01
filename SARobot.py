@@ -87,7 +87,7 @@ def PushwithMail(_msglist, _sendto):
 	smtpHost = 'smtp.sina.cn'
 	fromMail = username = 'nuggetstock@sina.com'  
 	password = 'welcome'
-	subject  = u'[%s] 自动推荐'%datetime.today().strftime('%Y/m/d')
+	subject  = u'[%s] 自动推荐'%datetime.today().strftime('%Y/%m/%d')
 	body     = '\n'.join(_msglist) 
 	mail = MIMEText(body,'plain','utf-8')  
 	mail['Subject'] = Header(subject,'utf-8')  
@@ -448,19 +448,21 @@ def SortList(_tupleList):
 	OrderedResult = sorted(AMAOrderedResult,key=lambda x:x[0:4])
 	return OrderedResult
 
-def PushStocks(_stockList, _targets):	
-	for item in _targets:
-		if   item['type'] == 'A':
-			toPush = _stockList
-			# PushwithPb(toPush,folder)
-		elif item['type'] == 'D':
-			toPush = [item for item in _stockList if item[0]=='D']
-		elif item['type'] == 'm':
-			toPush = [item for item in _stockList if item[1]=='m']
-		else:
-			print 'No message pushed for this contact.'
-		PushwithFetion(toPush,item['phone'])
-		PushwithMail(toPush, item['mail'])
+def PushStocks(_stockList, _targets):
+	if _stockList:
+		for target in _targets:
+			if   target['type'] == 'A':
+				toPush = _stockList
+				# PushwithPb(toPush,folder)
+			elif target['type'] == 'D':
+				toPush = [item for item in _stockList if item[0]=='D']
+			elif target['type'] == 'm':
+				toPush = [item for item in _stockList if item[1]=='m']
+			else:
+				toPush = []
+				print 'No message pushed for this contact.'
+			PushwithFetion(toPush, target['phone'])
+			PushwithMail(toPush, target['mail'])
 
 if __name__ == '__main__':
 	stocks = GetStockList()
