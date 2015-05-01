@@ -13,7 +13,7 @@ from datetime import datetime,timedelta,date
 from operator import itemgetter, div, sub
 from StockList import stock
 from PyFetion import *
-from PhoneList import Targets
+from PushList import Targets
 
 font = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=14) 
 M5clr  = '#0000CC'
@@ -87,12 +87,12 @@ def PushwithMail(_msglist, _sendto):
 	smtpHost = 'smtp.sina.cn'
 	fromMail = username = 'nuggetstock@sina.com'  
 	password = 'welcome'
-	subject  = u'[%s] 自动推荐'%datetime.today().strftime('%Y%m%d')
+	subject  = u'[%s] 自动推荐'%datetime.today().strftime('%Y/m/d')
 	body     = '\n'.join(_msglist) 
-	mail = MIMEText(body.encode('utf-8'),'plain','utf-8')  
+	mail = MIMEText(body,'plain','utf-8')  
 	mail['Subject'] = Header(subject,'utf-8')  
 	mail['From'] = fromMail  
-	mail['To'] = ','.join(_sendto)
+	mail['To'] = _sendto
 	mail['Date'] = formatdate() 
 	try:  
 		smtp = smtplib.SMTP_SSL(smtpHost)  
@@ -448,24 +448,25 @@ def SortList(_tupleList):
 	OrderedResult = sorted(AMAOrderedResult,key=lambda x:x[0:4])
 	return OrderedResult
 
+def PushStocks(_stockList, _targets):	
+	for item in _targets:
+		if   item['type'] == 'A':
+			toPush = _stockList
+			# PushwithPb(toPush,folder)
+		elif item['type'] == 'D':
+			toPush = [item for item in _stockList if item[0]=='D']
+		elif item['type'] == 'm':
+			toPush = [item for item in _stockList if item[1]=='m']
+		else:
+			print 'No message pushed for this contact.'
+		PushwithFetion(toPush,item['phone'])
+		PushwithMail(toPush, item['mail'])
+
 if __name__ == '__main__':
 	stocks = GetStockList()
 	begin = '20140101'
 	end = date.today().strftime('%Y%m%d')
 	result, folder = GoldSeeker(stocks, begin, end)
 	OrderedResult = SortList(result)	
-	for key,value in Targets.items():
-		if value == 'A':
-			PushwithFetion(OrderedResult,key)
-			PushwithPb(OrderedResult,folder)
-			PushwithMail(OrderedResult, 'nuggetstock@sina.com')
-		elif value == 'D':
-			FilteredResult = [item for item in OrderedResult if item[0]=='D']
-			PushwithFetion(FilteredResult,key)
-			# PushwithMail(FilteredResult, 'xuanxiaoyi@126.com')
-		elif value == 'M':
-			FilteredResult = [item for item in OrderedResult if item[1]=='m']
-			PushwithFetion(FilteredResult,key)
-			# PushwithMail(FilteredResult, 'nuggetstock@sina.com')
-		else:
-			print 'No message pushed for this contact.'
+	PushStocks(OrderedResult, Targets)
+
