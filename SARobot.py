@@ -26,7 +26,7 @@ DMAclr = '#0066FF'
 VARclr = '#3300FF'
 EXP1clr = '#FF00FF'
 EXP2clr = '#3300CC'
-RuleFolders = [u'RuleDmacrs',u'RuleDmakis',u'RuleGoldbar',u'RuleDblQaty',u'RuleTwine']
+RuleFolders = [u'RuleDmacrs',u'RuleDmakis',u'RuleGoldbar',u'RuleDblQaty',u'RuleTwine',u'Rule135']
 Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
 
 def GetIndustry(_stockid):
@@ -307,7 +307,20 @@ def RuleEXPMA(_list, _lastNdx, _date):
 	C2 = (_lastNdx - EXPZeros[-1])<5
 	Rule = False not in [C0,C1,C2]
 	return Rule
-	
+
+def Rule135(_array, Close, _date):
+	MA13 = MovingAverage(_array, 1, 13)
+	MA34 = MovingAverage(_array, 1, 34)
+	MA55 = MovingAverage(_array, 1, 55)
+	DIFF = CalcDiff(MA13)
+	C0 = CheckDate(_date)
+	C1 = MA55[-1]>MA34[-1]>MA13[-1]
+	print MA55[-1],MA34[-1],MA13[-1]
+	C2 = DIFF[-1] >= 0
+	C3 = Close[-1]>MA13[-1]
+	Rule = False not in [C0,C1,C2,C3]
+	return False
+
 def CalcBoll(Close,N=89, k=2):
 # Bollinger Bands consist of:
 # an N-period moving average (MA)
@@ -376,7 +389,8 @@ def GoldSeeker(_stocks, _beginDateStr, _endDateStr):
 			GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
 			DbleQuty = RuleDoubleQuantity(Close, Volumes, datex[-1])
 			Twine = RuleGoldTwine(DDD, AMA, Close, datex[-1])
-			for ndx,item in enumerate([Cross, Kiss, GoldBar,DbleQuty,Twine]):
+			OTF = Rule135(items, Close, datex[-1])
+			for ndx,item in enumerate([Cross, Kiss, GoldBar,DbleQuty,Twine,OTF]):
 				if item:
 					RuleFolder = RuleFolders[ndx]				
 					Percent = RisingPercent(items)
@@ -453,6 +467,7 @@ def PushStocks(_stockList, _targets):
 		for target in _targets:
 			if   target['type'] == 'A':
 				toPush = _stockList
+				PushwithMail(toPush, target['mail'])
 				# PushwithPb(toPush,folder)
 			elif target['type'] == 'D':
 				toPush = [item for item in _stockList if item[0]=='D']
@@ -461,7 +476,7 @@ def PushStocks(_stockList, _targets):
 			else:
 				toPush = []
 				print 'No message pushed for this contact.'			
-			PushwithMail(toPush, target['mail'])
+			# PushwithMail(toPush, target['mail'])
 			# PushwithFetion(toPush, target['phone'])
 			time.sleep(2)
 			
