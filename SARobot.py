@@ -64,11 +64,11 @@ def PushwithPb(_list, _title):
 	except Exception as e:
 		print str(e) + ' when pushing the msg with pushbullet.'
 		
-def PushwithFetion(_msglist, _sendto):
-	phone = PyFetion('13788976646', 'a5214496','TCP',debug=False)
-	phone.login(FetionHidden)
+def PushwithFetion(_msglist, _sendto):	
 	idx = 1
 	try:
+		phone = PyFetion('13788976646', 'a5214496','TCP',debug=False)
+		phone.login(FetionHidden)
 		while len(_msglist)>10:
 			sendlist = _msglist[0:10]
 			phone.send_sms('\n'.join([str(idx)+':']+sendlist), _sendto)
@@ -460,9 +460,11 @@ def PushStocks(_stockList, _targets):
 				toPush = [item for item in _stockList if item[1]=='m']
 			else:
 				toPush = []
-				print 'No message pushed for this contact.'
-			PushwithFetion(toPush, target['phone'])
+				print 'No message pushed for this contact.'			
 			PushwithMail(toPush, target['mail'])
+			# PushwithFetion(toPush, target['phone'])
+			time.sleep(2)
+			
 
 if __name__ == '__main__':
 	stocks = GetStockList()

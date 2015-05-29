@@ -28,7 +28,7 @@ FetionAway   = "100"
 FetionHidden  = "0"
 FetionOffline = "365"
 
-FetionVer = "5.6.0820"
+FetionVer = "5.6.2800"
 #"SIPP" USED IN HTTP CONNECTION
 FetionSIPP= "SIPP"
 FetionNavURL = "nav.fetion.com.cn"
