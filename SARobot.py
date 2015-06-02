@@ -2,6 +2,7 @@
 import os
 import re
 import time
+import json
 import requests
 import pushybullet as pb
 import numpy as np
@@ -221,8 +222,8 @@ def CalcMA(_array):
 	MACluster = {'MA1':MA1, 'MA5':MA5, 'MA10':MA10, 'MA20':MA20, 'MA30':MA30, 'VAR':VAR}
 	return MACluster
 
-def CalcDMA(_array, Short = 5, Long = 89, Middle = 34):
-	DDD = map(sub, MovingAverage(_array, 1, Short) , MovingAverage(_array, 1, Long))
+def CalcDMA(_close, Short = 5, Long = 89, Middle = 34):
+	DDD = map(sub, MovingAverage(_close, 0, Short) , MovingAverage(_close, 0, Long))
 	AMA = MovingAverage(DDD, 0, Middle)
 	DMA = map(sub, DDD , AMA)
 	# DMACluster = {'DMA':DMA, 'AMA':AMA, 'DIF':DIF}
@@ -308,18 +309,17 @@ def RuleEXPMA(_list, _lastNdx, _date):
 	Rule = False not in [C0,C1,C2]
 	return Rule
 
-def Rule135(_array, Close, _date):
-	MA13 = MovingAverage(_array, 1, 13)
-	MA34 = MovingAverage(_array, 1, 34)
-	MA55 = MovingAverage(_array, 1, 55)
+def Rule135(_close, _date):
+	MA13 = MovingAverage(_close, 0, 13)
+	MA34 = MovingAverage(_close, 0, 34)
+	MA55 = MovingAverage(_close, 0, 55)
 	DIFF = CalcDiff(MA13)
 	C0 = CheckDate(_date)
 	C1 = MA55[-1]>MA34[-1]>MA13[-1]
-	print MA55[-1],MA34[-1],MA13[-1]
 	C2 = DIFF[-1] >= 0
-	C3 = Close[-1]>MA13[-1]
+	C3 = _close[-1]>MA13[-1]
 	Rule = False not in [C0,C1,C2,C3]
-	return False
+	return Rule
 
 def CalcBoll(Close,N=89, k=2):
 # Bollinger Bands consist of:
@@ -340,6 +340,19 @@ def CalcBoll(Close,N=89, k=2):
 	Band = map(lambda x,y,z:(x-z)/(float(y) if y!=0 else 1.0), UP, MD, DN)
 	return MA, UP, DN, b, Band
 
+def GrabHFQPrice(_stockid):
+	hfqUrl = 'http://vip.stock.finance.sina.com.cn/api/json.php/BasicStockSrv.getStockFuQuanData?symbol=sz%s&type=hfq'%_stockid
+	r = requests.get(hfqUrl, headers = Headers)
+	text = r.text[1:-1]
+	text = text.replace('{_', '{"')
+	text = text.replace('total', '"total"')
+	text = text.replace('data', '"data"')
+	text = text.replace(':"', '":"')
+	text = text.replace('",_', '","')
+	text = text.replace('_', '-')
+	jdata = json.loads(text, encoding = 'utf-8')
+	return jdata['data']
+	
 def GoldSeeker(_stocks, _beginDateStr, _endDateStr):
 	Result = []
 	start = datetime.now()
@@ -348,21 +361,26 @@ def GoldSeeker(_stocks, _beginDateStr, _endDateStr):
 		temp = datetime.now()		
 		try:
 			stockname, stockid = StockQuery(id)
-			items = GrabStock(stockid, _beginDateStr, _endDateStr)		
+			items = GrabStock(stockid, _beginDateStr, _endDateStr)
+			HfqPrice = GrabHFQPrice(id)			
 			datex = GetColumn(items, 5)		
-			MACluster = CalcMA(items)		
-			[DDD, AMA, DMA] = CalcDMA(items)		
-			zero_ndx = FindZero(DMA)
-			zero_pts = GetPart(zero_ndx, DMA)
+			MACluster = CalcMA(items)
 			length = len(items)
 			idx = xrange(length)
 			emp = ['']*length
 			Open = GetColumn(items, 0)			
 			Close = GetColumn(items, 1)
-			High = GetColumn(items, 2)
-			Low = GetColumn(items, 3)
+			HfqClose = map(lambda d: float(HfqPrice[d]), datex)
+			[DDD, AMA, DMA] = CalcDMA(HfqClose)		
+			zero_ndx = FindZero(DMA)
+			zero_pts = GetPart(zero_ndx, DMA)
+			
+			
+			# High = GetColumn(items, 2)
+			# Low = GetColumn(items, 3)
 			Volumes = GetColumn(items, 4)
-			Vol = NormVol(Volumes)
+			# Vol = NormVol(Volumes)
+			# #==================Ignore Figure==========#
 			# MA, UP, DN, b, Band = CalcBoll(Close)
 			# plt.subplot(2, 1, 1)
 			# plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
@@ -382,75 +400,76 @@ def GoldSeeker(_stocks, _beginDateStr, _endDateStr):
 
 			# Draw Vol-fig
 			# plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r')
-			# plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g')			
+			# plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g')	
+			# #==================Ignore Figure==========#
 
 			Cross = RuleGoldCross(DDD, AMA, zero_ndx[-3:], idx[-1], datex[-1])
-			Kiss = RuleGoldKiss(DDD, AMA, zero_ndx[-1], Close, idx[-1], datex[-1])		
-			GoldBar = RuleGoldBar(Close, Volumes, datex[-1])
-			DbleQuty = RuleDoubleQuantity(Close, Volumes, datex[-1])
-			Twine = RuleGoldTwine(DDD, AMA, Close, datex[-1])
-			OTF = Rule135(items, Close, datex[-1])
+			Kiss = RuleGoldKiss(DDD, AMA, zero_ndx[-1], HfqClose, idx[-1], datex[-1])		
+			GoldBar = RuleGoldBar(HfqClose, Volumes, datex[-1])
+			DbleQuty = RuleDoubleQuantity(HfqClose, Volumes, datex[-1])
+			Twine = RuleGoldTwine(DDD, AMA, HfqClose, datex[-1])
+			OTF = Rule135(HfqClose, datex[-1])
 			for ndx,item in enumerate([Cross, Kiss, GoldBar,DbleQuty,Twine,OTF]):
 				if item:
 					RuleFolder = RuleFolders[ndx]				
-					Percent = RisingPercent(items)
-					Rise = map(sub, Close , Open)
-					rise_index = [i for i,per in enumerate(Rise) if per>=0]
-					fall_index = [i for i,per in enumerate(Rise) if per<0]
+					
+					# #==================Ignore Figure==========#
+					# Percent = RisingPercent(items)
+					# Rise = map(sub, Close , Open)
+					# rise_index = [i for i,per in enumerate(Rise) if per>=0]
+					# fall_index = [i for i,per in enumerate(Rise) if per<0]
 
-					step = 5
-					lookback = 55
-					id_start = idx[-1]-lookback if idx[-1]>lookback else idx[0]
-					plt.subplot(3, 1, 1)			
-					# plt.plot(idx,MA, 'b' ,UP, 'r',DN,'g')
+					# step = 5
+					# lookback = 55
+					# id_start = idx[-1]-lookback if idx[-1]>lookback else idx[0]
+					# plt.subplot(3, 1, 1)			
 					
 					# Draw K-fig 
-					rise_index = [i for i,per in enumerate(Rise) if per>=0]
-					fall_index = [i for i,per in enumerate(Rise) if per<0]
-					plt.vlines(rise_index, GetPart(rise_index,Low), GetPart(rise_index,High), edgecolor='red', linewidth=1, label='_nolegend_') 
-					plt.vlines(rise_index, GetPart(rise_index,Open), GetPart(rise_index,Close), edgecolor='red', linewidth=4, label='_nolegend_')
-					plt.vlines(fall_index, GetPart(fall_index,Low), GetPart(fall_index,High), edgecolor='green', linewidth=1, label='_nolegend_') 
-					plt.vlines(fall_index, GetPart(fall_index,Open), GetPart(fall_index,Close), edgecolor='green', linewidth=4, label='_nolegend_')	
-					plt.title(stockname, fontproperties=font)	
+					# rise_index = [i for i,per in enumerate(Rise) if per>=0]
+					# fall_index = [i for i,per in enumerate(Rise) if per<0]
+					# plt.vlines(rise_index, GetPart(rise_index,Low), GetPart(rise_index,High), edgecolor='red', linewidth=1, label='_nolegend_') 
+					# plt.vlines(rise_index, GetPart(rise_index,Open), GetPart(rise_index,Close), edgecolor='red', linewidth=4, label='_nolegend_')
+					# plt.vlines(fall_index, GetPart(fall_index,Low), GetPart(fall_index,High), edgecolor='green', linewidth=1, label='_nolegend_') 
+					# plt.vlines(fall_index, GetPart(fall_index,Open), GetPart(fall_index,Close), edgecolor='green', linewidth=4, label='_nolegend_')	
+					# plt.title(stockname, fontproperties=font)	
 					
-					plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)		
-					ax = plt.gca()		
-					ax.autoscale(enable=True, axis='both', tight=True)
-					ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
-					ax.set_xlim([id_start,idx[-1]])				
-					ax.set_ylim(min(Close[id_start:]), max(Close[id_start:]))
+					# plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)		
+					# ax = plt.gca()		
+					# ax.autoscale(enable=True, axis='both', tight=True)
+					# ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
+					# ax.set_xlim([id_start,idx[-1]])				
+					# ax.set_ylim(min(Close[id_start:]), max(Close[id_start:]))
 					
-					plt.subplot(3, 1, 2)
-					plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
-					plt.plot(idx,DDD, DDDclr, AMA, AMAclr ,DMA, DMAclr)
-					#plt.plot(idx, DMACluster['DIFF'],'g')
-					#plt.plot(idx, CalcDiff(DMACluster['DIFF']),'k')
-					plt.plot(zero_ndx[-3:], zero_pts[-3:], 'ro')			
-					plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)				
-					ax = plt.gca()
-					ax.autoscale(enable=True, axis='both', tight=True)			
-					ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
-					ax.set_xlim([id_start,idx[-1]])				
-					ax.set_ylim(min(DMA[id_start:] + AMA[id_start:] + DDD[id_start:]),\
-					max(DMA[id_start:] + AMA[id_start:]+ DDD[id_start:]))
+					# plt.subplot(3, 1, 2)
+					# plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
+					# plt.plot(idx,DDD, DDDclr, AMA, AMAclr ,DMA, DMAclr)
+					# plt.plot(zero_ndx[-3:], zero_pts[-3:], 'ro')			
+					# plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)				
+					# ax = plt.gca()
+					# ax.autoscale(enable=True, axis='both', tight=True)			
+					# ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
+					# ax.set_xlim([id_start,idx[-1]])				
+					# ax.set_ylim(min(DMA[id_start:] + AMA[id_start:] + DDD[id_start:]),\
+					# max(DMA[id_start:] + AMA[id_start:]+ DDD[id_start:]))
 					
-					plt.subplot(3, 1, 3)
-					plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r',align="center")
-					plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g',align="center")				
-					plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)		
-					plt.xticks(np.arange(len(idx))[0::step], emp[0::step])
-					ax = plt.gca()	
-					ax.autoscale(enable=True, axis='both', tight=True)
-					ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
-					ax.set_xlim([id_start,idx[-1]])				
+					# plt.subplot(3, 1, 3)
+					# plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r',align="center")
+					# plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g',align="center")				
+					# plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)		
+					# plt.xticks(np.arange(len(idx))[0::step], emp[0::step])
+					# ax = plt.gca()	
+					# ax.autoscale(enable=True, axis='both', tight=True)
+					# ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
+					# ax.set_xlim([id_start,idx[-1]])				
 					# plt.show()
+
+					# try:
+						# plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname,datex[zero_ndx[-1]]), dpi=100)
+					# except:
+						# plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname[1:],datex[zero_ndx[-1]]), dpi=100)
+					# plt.clf()	
 					goldstock = '{0:8}- {1} {2}({3})'.format(RuleFolder[4:],stockid[2:],stockname.encode('utf-8'),GetIndustry(stockid[2:]).encode('utf-8'))
 					Result.append((goldstock,AMA[-1]))
-					try:
-						plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname,datex[zero_ndx[-1]]), dpi=100)
-					except:
-						plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname[1:],datex[zero_ndx[-1]]), dpi=100)
-					plt.clf()				
 			print 'Complete %s: %s - %s, Elapsed Time: %s'%(num, stockname,stockid,temp-start)
 		except Exception as e:
 			print str(e)+ ' when grabing stock:' + str(id)
@@ -467,7 +486,6 @@ def PushStocks(_stockList, _targets):
 		for target in _targets:
 			if   target['type'] == 'A':
 				toPush = _stockList
-				PushwithMail(toPush, target['mail'])
 				# PushwithPb(toPush,folder)
 			elif target['type'] == 'D':
 				toPush = [item for item in _stockList if item[0]=='D']
@@ -476,14 +494,13 @@ def PushStocks(_stockList, _targets):
 			else:
 				toPush = []
 				print 'No message pushed for this contact.'			
-			# PushwithMail(toPush, target['mail'])
+			PushwithMail(toPush, target['mail'])
 			# PushwithFetion(toPush, target['phone'])
-			time.sleep(2)
-			
+			time.sleep(2)			
 
 if __name__ == '__main__':
 	stocks = GetStockList()
-	begin = '20140101'
+	begin = '20140601'
 	end = date.today().strftime('%Y%m%d')
 	result, folder = GoldSeeker(stocks, begin, end)
 	OrderedResult = SortList(result)	
