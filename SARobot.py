@@ -4,6 +4,7 @@ import re
 import time
 import json
 import requests
+import logging
 import pushybullet as pb
 import numpy as np
 import pandas as pd
@@ -27,7 +28,7 @@ DMAclr = '#0066FF'
 VARclr = '#3300FF'
 EXP1clr = '#FF00FF'
 EXP2clr = '#3300CC'
-RuleFolders = [u'RuleDmacrs',u'RuleDmakis',u'RuleGoldbar',u'RuleDblQaty',u'RuleTwine',u'Rule135']
+RuleFolders = [u'RuleDmacrs',u'RuleDmakis',u'RuleGoldbar',u'RuleDblQaty',u'RuleTwine',u'RuleMultiArr']
 Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
 
 def GetIndustry(_stockid):
@@ -54,6 +55,13 @@ def CreateFolder():
 			os.mkdir(subfolder)
 	return folderpath,folder
 
+def InitLogging(_folderpath):
+	logging.basicConfig(level=logging.WARNING,
+                format='%(message)s',
+                datefmt='%a, %d %b %Y %H:%M:%S',
+                filename=os.path.join(_folderpath, 'stockdata.log'),
+                filemode='w')
+				
 def PushwithPb(_list, _title):
 	KEY = "pdaXjHTgQJ9s5sZRdfi93BMTz4CjICGl"
 	try:
@@ -101,9 +109,9 @@ def PushwithMail(_msglist, _sendto):
 		smtp.login(username,password)
 		smtp.sendmail(fromMail,_sendto,mail.as_string())  
 		smtp.close()  
-		print 'Push to mail successfully.'  
+		logging.warning('Push to mail successfully.')
 	except Exception as e:  
-		print str(e) + ' when pushing the msg with Mail.'
+		logging.warning(str(e) + ' when pushing the msg with Mail.')
 		
 def CheckDate(_date):
 	today = date.today()
@@ -154,7 +162,7 @@ def GetColumn(_array, _column):
 	return [itemgetter(_column)(row) for row in _array]
 
 def GetPart(_indices, _list):
-	return [_list[idx] for idx in _indices]	
+	return [_list[idx] for idx in _indices]
 	
 def MovingAverage(_array, _idx, _width):
 	length = len(_array)
@@ -262,10 +270,10 @@ def RuleGoldKiss(DDD, AMA, _zeroNdx, Close, _lastNdx, _date, _check = True):
 	DMAAfterZero = DMA[_zeroNdx:]
 	MaxDMA, MaxIndx = max( (v, i) for i, v in enumerate(DMAAfterZero) )		
 	C0 = CheckDate(_date) if _check else True
-	C1 = 0<DMA[_lastNdx]<0.04*Close[_lastNdx] # Last day DMA Less than Close_price*1.5%
-	C2 = 0<DMA[DFZeros[-1]]<0.02*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*1%
+	C1 = 0<DMA[_lastNdx]<0.15*Close[_lastNdx] # Last day DMA Less than Close_price*1.5%
+	C2 = 0<DMA[DFZeros[-1]]<0.1*Close[DFZeros[-1]] # Kiss day DMA Less than Close_price*10%
 	C3 = MaxDMA > 0.03*Close[_zeroNdx+MaxIndx]
-	C4 = 5<=(_lastNdx - _zeroNdx)<=60 and (_lastNdx - DFZeros[-1])<=1 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
+	C4 = 5<=(_lastNdx - _zeroNdx)<=120 and (_lastNdx - DFZeros[-1])<=1 # Last DMA Cross day within 9 weeks, Kiss day within 1 week
 	C5 = DIFF[_zeroNdx] > 0
 	C6 = DIFF[_lastNdx] >= 0
 	C7 = AMADIFF[_lastNdx] > 0 or AMA[DFZeros[-1]]-AMA[_zeroNdx] >0
@@ -309,6 +317,18 @@ def RuleEXPMA(_list, _lastNdx, _date):
 	Rule = False not in [C0,C1,C2]
 	return Rule
 
+def RuleMultiArrange(_close, _date):
+	MA5  = MovingAverage(_close, 0, 5 )
+	MA13 = MovingAverage(_close, 0, 13)
+	MA21 = MovingAverage(_close, 0, 21)
+	MA34 = MovingAverage(_close, 0, 34)
+	MA55 = MovingAverage(_close, 0, 55)
+	C0 = MA5[-1] > MA13[-1] > MA21[-1] > MA34[-1] > MA55[-1]
+	C1 = MA5[-2] > MA13[-2] > MA21[-2] > MA34[-2] > MA55[-2]
+	C2 = MA5[-3] > MA13[-3] > MA21[-3] > MA34[-3] > MA55[-3]
+	Rule = False not in [C0,C1,C2]
+	return Rule	
+	
 def Rule135(_close, _date):
 	MA13 = MovingAverage(_close, 0, 13)
 	MA34 = MovingAverage(_close, 0, 34)
@@ -341,8 +361,9 @@ def CalcBoll(Close,N=89, k=2):
 	return MA, UP, DN, b, Band
 
 def GrabHFQPrice(_stockid):
-	hfqUrl = 'http://vip.stock.finance.sina.com.cn/api/json.php/BasicStockSrv.getStockFuQuanData?symbol=sz%s&type=hfq'%_stockid
-	r = requests.get(hfqUrl, headers = Headers)
+	hfqUrl = 'http://vip.stock.finance.sina.com.cn/api/json.php/BasicStockSrv.getStockFuQuanData'
+	payload = {'symbol': _stockid,'type': 'hfq'}
+	r = requests.get(hfqUrl, headers = Headers, params = payload)
 	text = r.text[1:-1]
 	text = text.replace('{_', '{"')
 	text = text.replace('total', '"total"')
@@ -357,6 +378,7 @@ def GoldSeeker(_stocks, _beginDateStr, _endDateStr):
 	Result = []
 	start = datetime.now()
 	baseFolder, folder = CreateFolder()
+	InitLogging(baseFolder)
 	for num,id in enumerate(_stocks):
 		temp = datetime.now()		
 		try:
@@ -408,8 +430,10 @@ def GoldSeeker(_stocks, _beginDateStr, _endDateStr):
 			GoldBar = RuleGoldBar(HfqClose, Volumes, datex[-1])
 			DbleQuty = RuleDoubleQuantity(HfqClose, Volumes, datex[-1])
 			Twine = RuleGoldTwine(DDD, AMA, HfqClose, datex[-1])
-			OTF = Rule135(HfqClose, datex[-1])
-			for ndx,item in enumerate([Cross, Kiss, GoldBar,DbleQuty,Twine,OTF]):
+			# OTF = Rule135(HfqClose, datex[-1])
+			MultiArr = RuleMultiArrange(HfqClose, datex[-1])
+			category = ['']
+			for ndx,item in enumerate([Cross, Kiss, GoldBar, DbleQuty, Twine, MultiArr]):
 				if item:
 					RuleFolder = RuleFolders[ndx]				
 					
@@ -469,10 +493,11 @@ def GoldSeeker(_stocks, _beginDateStr, _endDateStr):
 						# plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname[1:],datex[zero_ndx[-1]]), dpi=100)
 					# plt.clf()	
 					goldstock = '{0:8}- {1} {2}({3})'.format(RuleFolder[4:],stockid[2:],stockname.encode('utf-8'),GetIndustry(stockid[2:]).encode('utf-8'))
+					category.append(RuleFolder[4:])
 					Result.append((goldstock,AMA[-1]))
-			print 'Complete %s: %s - %s, Elapsed Time: %s'%(num, stockname,stockid,temp-start)
+			logging.warning('Complete %4s: %4s - %s, Elapsed Time: %s %s'%(num, stockname, stockid, temp-start, '@'.join(category)))
 		except Exception as e:
-			print str(e)+ ' when grabing stock:' + str(id)
+			logging.warning('Error '+str(e)+' when grabing stock:' + str(id))
 	return Result, folder
 
 def SortList(_tupleList):
@@ -489,20 +514,20 @@ def PushStocks(_stockList, _targets):
 				# PushwithPb(toPush,folder)
 			elif target['type'] == 'D':
 				toPush = [item for item in _stockList if item[0]=='D']
+				print toPush
 			elif target['type'] == 'm':
 				toPush = [item for item in _stockList if item[1]=='m']
 			else:
-				toPush = []
-				print 'No message pushed for this contact.'			
+				toPush = [':( Sorry. Keep you money in your pocket safely. No stocks to push today.'] 		
 			PushwithMail(toPush, target['mail'])
 			# PushwithFetion(toPush, target['phone'])
 			time.sleep(2)			
 
 if __name__ == '__main__':
 	stocks = GetStockList()
-	begin = '20140601'
+	begin = '20140801'
 	end = date.today().strftime('%Y%m%d')
 	result, folder = GoldSeeker(stocks, begin, end)
 	OrderedResult = SortList(result)	
-	PushStocks(OrderedResult, Targets)
+	# PushStocks(OrderedResult, Targets)
 
