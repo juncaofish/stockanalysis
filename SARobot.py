@@ -1,11 +1,15 @@
 # -*- coding=utf-8 -*-
 import os
+import sys
 import re
 import time
 import json
 import requests
 import logging
-import pushybullet as pb
+import traceback
+import itertools
+import multiprocessing
+from logging.handlers import TimedRotatingFileHandler
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -14,23 +18,33 @@ from lxml import etree
 from datetime import datetime,timedelta,date
 from operator import itemgetter, div, sub
 from StockList import stock
-from PyFetion import *
+# import pushybullet as pb
+# from PyFetion import *
 from PushList import Targets
 
-font = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=14) 
-M5clr  = '#0000CC'
-M10clr = '#FFCC00'
-M20clr = '#CC6699'
-M30clr = '#009966'
-DDDclr = '#000000'
-AMAclr = '#FF0033'
-DMAclr = '#0066FF'
-VARclr = '#3300FF'
-EXP1clr = '#FF00FF'
-EXP2clr = '#3300CC'
 RuleFolders = [u'RuleDmacrs',u'RuleDmakis',u'RuleGoldbar',u'RuleDblQaty',u'RuleTwine',u'RuleMultiArr']
 Headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.111 Safari/537.36'}
+fromDate = '20140801'
+toDate = date.today().strftime('%Y%m%d')
+	
+class StockType():
+	SH = 'SH'
+	SZ = 'SZ'
+	CY = 'CY'
 
+class FigureConf():
+	Font = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=14) 
+	M5clr   = '#0000CC'
+	M10clr  = '#FFCC00'
+	M20clr  = '#CC6699'
+	M30clr  = '#009966'
+	DDDclr  = '#000000'
+	AMAclr  = '#FF0033'
+	DMAclr  = '#0066FF'
+	VARclr  = '#3300FF'
+	EXP1clr = '#FF00FF'
+	EXP2clr = '#3300CC'
+	
 def GetIndustry(_stockid):
 	data =  pd.read_csv(os.path.join(BaseDir(), r'data\all.csv'), dtype={'code':'object'}, encoding='GBK')
 	industry = data.ix[data.code==_stockid,['industry']].values[0][0]
@@ -55,12 +69,20 @@ def CreateFolder():
 			os.mkdir(subfolder)
 	return folderpath,folder
 
-def InitLogging(_folderpath):
-	logging.basicConfig(level=logging.WARNING,
-                format='%(message)s',
-                datefmt='%a, %d %b %Y %H:%M:%S',
-                filename=os.path.join(_folderpath, 'stockdata.log'),
-                filemode='w')
+def SetLogger(logger, dirStr, logName):
+	if not os.path.exists(dirStr):
+		os.makedirs(dirStr)
+	logFileName = os.path.join(dirStr, logName)
+	logHandler = TimedRotatingFileHandler(logFileName, when="midnight")
+	logHandler.suffix = "%Y%m%d_%H%M%S.log"
+	logFormatter = logging.Formatter('%(asctime)-12s:%(message)s')
+	logHandler.setFormatter(logFormatter)
+	streamHandle = logging.StreamHandler()
+	streamHandle.setFormatter(logFormatter)
+	logger.addHandler(logHandler)
+	logger.addHandler(streamHandle)
+	logger.setLevel(logging.WARNING)
+	return logger
 				
 def PushwithPb(_list, _title):
 	KEY = "pdaXjHTgQJ9s5sZRdfi93BMTz4CjICGl"
@@ -89,6 +111,7 @@ def PushwithFetion(_msglist, _sendto):
 		print str(e) + ' when pushing the msg with Fetion.'
 
 def PushwithMail(_msglist, _sendto):
+	global logger
 	import smtplib  
 	from email.MIMEText import MIMEText  
 	from email.Utils import formatdate  
@@ -109,9 +132,9 @@ def PushwithMail(_msglist, _sendto):
 		smtp.login(username,password)
 		smtp.sendmail(fromMail,_sendto,mail.as_string())  
 		smtp.close()  
-		logging.warning('Push to mail successfully.')
+		logger.warning('Push to %s successfully.'%_sendto)
 	except Exception as e:  
-		logging.warning(str(e) + ' when pushing the msg with Mail.')
+		logger.warning(str(e) + ' when pushing the msg with Mail.')
 		
 def CheckDate(_date):
 	today = date.today()
@@ -123,7 +146,7 @@ def ConvStrToDate(_str):
 	ymd = time.strptime(_str,'%Y%m%d')
 	return date(*ymd[0:3])
 	
-def ConvDateToStr(_date):	
+def ConvDateToStr(_date):
 	return _date.strftime('%Y%m%d')
 	
 def GrabRealTimeStock(_stockid):
@@ -154,7 +177,7 @@ def StockQuery(_stockname):
 	m = re.match(r'\d{6}', _stockname)
 	stockid = _stockname if m else stock.get(_stockname)
 	stockname = stock.get(_stockname) if m else _stockname
-	stockloc = 'sh' if stockid[0] == '6' else 'sz'
+	stockloc = StockType.SH if stockid[0] == '6' else StockType.SZ
 	stockid = stockloc + stockid
 	return stockname.decode('utf-8'), stockid	
 	
@@ -179,7 +202,6 @@ def CalcExpMA(_list, _period):
 	def ExpMA(_list, n, N):
 		return _list[0] if n == 0 else (_list[n]*2.0 + (N - 1.0)*ExpMA(_list, n-1,N))/( N +1.0)
 	ExpMA = [ExpMA(_list,i,_period) for i in xrange(length)]
-	# ExpMA2 = [ExpMA(List,i,50) for i in xrange(length)]
 	return ExpMA
 		
 def RisingPercent(_array):
@@ -323,10 +345,11 @@ def RuleMultiArrange(_close, _date):
 	MA21 = MovingAverage(_close, 0, 21)
 	MA34 = MovingAverage(_close, 0, 34)
 	MA55 = MovingAverage(_close, 0, 55)
-	C0 = MA5[-1] > MA13[-1] > MA21[-1] > MA34[-1] > MA55[-1]
-	C1 = MA5[-2] > MA13[-2] > MA21[-2] > MA34[-2] > MA55[-2]
-	C2 = MA5[-3] > MA13[-3] > MA21[-3] > MA34[-3] > MA55[-3]
-	Rule = False not in [C0,C1,C2]
+	C0 = CheckDate(_date)
+	C1 = MA5[-1] > MA13[-1] > MA21[-1] > MA34[-1] > MA55[-1]
+	C2 = MA5[-2] > MA13[-2] > MA21[-2] > MA34[-2] > MA55[-2]
+	C3 = MA5[-3] > MA13[-3] > MA21[-3] > MA34[-3] > MA55[-3]
+	Rule = False not in [C0, C1,not C2, not C3]
 	return Rule	
 	
 def Rule135(_close, _date):
@@ -373,132 +396,107 @@ def GrabHFQPrice(_stockid):
 	text = text.replace('_', '-')
 	jdata = json.loads(text, encoding = 'utf-8')
 	return jdata['data']
+
+def GenerateFigure(_open, _close, _items):
+	# GenerateFigure(Open, Close, items)
+	#==================Ignore Figure==========#
+	Percent = RisingPercent(items)
+	Rise = map(sub, Close , Open)
+	rise_index = [i for i,per in enumerate(Rise) if per>=0]
+	fall_index = [i for i,per in enumerate(Rise) if per<0]
+
+	step = 5
+	lookback = 55
+	id_start = idx[-1]-lookback if idx[-1]>lookback else idx[0]
+	plt.subplot(3, 1, 1)			
 	
-def GoldSeeker(_stocks, _beginDateStr, _endDateStr):
-	Result = []
-	start = datetime.now()
-	baseFolder, folder = CreateFolder()
-	InitLogging(baseFolder)
-	for num,id in enumerate(_stocks):
-		temp = datetime.now()		
-		try:
-			stockname, stockid = StockQuery(id)
-			items = GrabStock(stockid, _beginDateStr, _endDateStr)
-			HfqPrice = GrabHFQPrice(id)			
-			datex = GetColumn(items, 5)		
-			MACluster = CalcMA(items)
-			length = len(items)
-			idx = xrange(length)
-			emp = ['']*length
-			Open = GetColumn(items, 0)			
-			Close = GetColumn(items, 1)
-			HfqClose = map(lambda d: float(HfqPrice[d]), datex)
-			[DDD, AMA, DMA] = CalcDMA(HfqClose)		
-			zero_ndx = FindZero(DMA)
-			zero_pts = GetPart(zero_ndx, DMA)
-			
-			
-			# High = GetColumn(items, 2)
-			# Low = GetColumn(items, 3)
-			Volumes = GetColumn(items, 4)
-			# Vol = NormVol(Volumes)
-			# #==================Ignore Figure==========#
-			# MA, UP, DN, b, Band = CalcBoll(Close)
-			# plt.subplot(2, 1, 1)
-			# plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
-			# plt.plot(idx,MACluster['MA5'], M5clr ,MACluster['MA10'], M10clr ,MACluster['MA20'], M20clr ,MACluster['MA30'], M30clr ,DMACluster['DMA'], DMAclr, DMACluster['AMA'], AMAclr ,DMACluster['DIF'], DIFclr)
-			# plt.plot(idx, DMACluster['DIFF'],'g')
-			# #plt.plot(idx, CalcDiff(DMACluster['DIFF']),'k')
-			# plt.plot(zero_ndx[-3:], zero_pts[-3:], 'ro')
-			# plt.plot(small_ndx[-3:], small_pts[-3:],'g*')
+	# Draw K-fig 
+	rise_index = [i for i,per in enumerate(Rise) if per>=0]
+	fall_index = [i for i,per in enumerate(Rise) if per<0]
+	plt.vlines(rise_index, GetPart(rise_index,Low), GetPart(rise_index,High), edgecolor='red', linewidth=1, label='_nolegend_') 
+	plt.vlines(rise_index, GetPart(rise_index,Open), GetPart(rise_index,Close), edgecolor='red', linewidth=4, label='_nolegend_')
+	plt.vlines(fall_index, GetPart(fall_index,Low), GetPart(fall_index,High), edgecolor='green', linewidth=1, label='_nolegend_') 
+	plt.vlines(fall_index, GetPart(fall_index,Open), GetPart(fall_index,Close), edgecolor='green', linewidth=4, label='_nolegend_')	
+	plt.title(stockname, fontproperties = FigureConf.Font)	
+	
+	plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)		
+	ax = plt.gca()		
+	ax.autoscale(enable=True, axis='both', tight=True)
+	ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
+	ax.set_xlim([id_start,idx[-1]])				
+	ax.set_ylim(min(Close[id_start:]), max(Close[id_start:]))
+	
+	plt.subplot(3, 1, 2)
+	plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
+	plt.plot(idx,DDD, DDDclr, AMA, AMAclr ,DMA, DMAclr)
+	plt.plot(zero_ndx[-3:], zero_pts[-3:], 'ro')			
+	plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)				
+	ax = plt.gca()
+	ax.autoscale(enable=True, axis='both', tight=True)			
+	ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
+	ax.set_xlim([id_start,idx[-1]])				
+	ax.set_ylim(min(DMA[id_start:] + AMA[id_start:] + DDD[id_start:]),\
+	max(DMA[id_start:] + AMA[id_start:]+ DDD[id_start:]))
+	
+	plt.subplot(3, 1, 3)
+	plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r',align="center")
+	plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g',align="center")				
+	plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)		
+	plt.xticks(np.arange(len(idx))[0::step], emp[0::step])
+	ax = plt.gca()	
+	ax.autoscale(enable=True, axis='both', tight=True)
+	ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
+	ax.set_xlim([id_start,idx[-1]])				
+	# # plt.show()
+	try:
+		plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname,datex[zero_ndx[-1]]), dpi=100)
+	except:
+		plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname[1:],datex[zero_ndx[-1]]), dpi=100)
+	plt.clf()
 
-			# Draw Percent
-			# up_index = [i for i,per in enumerate(Percent) if per>=0]
-			# dn_index = [i for i,per in enumerate(Percent) if per<0]
-			# plt.bar(up_index, GetPart(up_index,Percent),color='r',edgecolor='r')
-			# plt.bar(dn_index, GetPart(dn_index,Percent),color='g',edgecolor='g')	
-			# plt.plot(idx, [10]*len(idx),'r--')
-			# plt.plot(idx, [-10]*len(idx),'g--')
-
-			# Draw Vol-fig
-			# plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r')
-			# plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g')	
-			# #==================Ignore Figure==========#
-
-			Cross = RuleGoldCross(DDD, AMA, zero_ndx[-3:], idx[-1], datex[-1])
-			Kiss = RuleGoldKiss(DDD, AMA, zero_ndx[-1], HfqClose, idx[-1], datex[-1])		
-			GoldBar = RuleGoldBar(HfqClose, Volumes, datex[-1])
-			DbleQuty = RuleDoubleQuantity(HfqClose, Volumes, datex[-1])
-			Twine = RuleGoldTwine(DDD, AMA, HfqClose, datex[-1])
-			# OTF = Rule135(HfqClose, datex[-1])
-			MultiArr = RuleMultiArrange(HfqClose, datex[-1])
-			category = ['']
-			for ndx,item in enumerate([Cross, Kiss, GoldBar, DbleQuty, Twine, MultiArr]):
-				if item:
-					RuleFolder = RuleFolders[ndx]				
-					
-					# #==================Ignore Figure==========#
-					# Percent = RisingPercent(items)
-					# Rise = map(sub, Close , Open)
-					# rise_index = [i for i,per in enumerate(Rise) if per>=0]
-					# fall_index = [i for i,per in enumerate(Rise) if per<0]
-
-					# step = 5
-					# lookback = 55
-					# id_start = idx[-1]-lookback if idx[-1]>lookback else idx[0]
-					# plt.subplot(3, 1, 1)			
-					
-					# Draw K-fig 
-					# rise_index = [i for i,per in enumerate(Rise) if per>=0]
-					# fall_index = [i for i,per in enumerate(Rise) if per<0]
-					# plt.vlines(rise_index, GetPart(rise_index,Low), GetPart(rise_index,High), edgecolor='red', linewidth=1, label='_nolegend_') 
-					# plt.vlines(rise_index, GetPart(rise_index,Open), GetPart(rise_index,Close), edgecolor='red', linewidth=4, label='_nolegend_')
-					# plt.vlines(fall_index, GetPart(fall_index,Low), GetPart(fall_index,High), edgecolor='green', linewidth=1, label='_nolegend_') 
-					# plt.vlines(fall_index, GetPart(fall_index,Open), GetPart(fall_index,Close), edgecolor='green', linewidth=4, label='_nolegend_')	
-					# plt.title(stockname, fontproperties=font)	
-					
-					# plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)		
-					# ax = plt.gca()		
-					# ax.autoscale(enable=True, axis='both', tight=True)
-					# ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
-					# ax.set_xlim([id_start,idx[-1]])				
-					# ax.set_ylim(min(Close[id_start:]), max(Close[id_start:]))
-					
-					# plt.subplot(3, 1, 2)
-					# plt.stem(idx, MACluster['VAR'], linefmt=VARclr, markerfmt=" ", basefmt=" ")
-					# plt.plot(idx,DDD, DDDclr, AMA, AMAclr ,DMA, DMAclr)
-					# plt.plot(zero_ndx[-3:], zero_pts[-3:], 'ro')			
-					# plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)				
-					# ax = plt.gca()
-					# ax.autoscale(enable=True, axis='both', tight=True)			
-					# ax.set_xticklabels( emp[0::step], rotation=75, fontsize='small')
-					# ax.set_xlim([id_start,idx[-1]])				
-					# ax.set_ylim(min(DMA[id_start:] + AMA[id_start:] + DDD[id_start:]),\
-					# max(DMA[id_start:] + AMA[id_start:]+ DDD[id_start:]))
-					
-					# plt.subplot(3, 1, 3)
-					# plt.bar(rise_index, GetPart(rise_index,Vol),bottom=-20,color='r',edgecolor='r',align="center")
-					# plt.bar(fall_index, GetPart(fall_index,Vol),bottom=-20,color='g',edgecolor='g',align="center")				
-					# plt.grid(True, 'major', color='0.3', linestyle='solid', linewidth=0.2)		
-					# plt.xticks(np.arange(len(idx))[0::step], emp[0::step])
-					# ax = plt.gca()	
-					# ax.autoscale(enable=True, axis='both', tight=True)
-					# ax.set_xticklabels(datex[0::step], rotation=75, fontsize='small')
-					# ax.set_xlim([id_start,idx[-1]])				
-					# plt.show()
-
-					# try:
-						# plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname,datex[zero_ndx[-1]]), dpi=100)
-					# except:
-						# plt.savefig('%s/%s/%s%s.png'%(baseFolder,RuleFolder,stockid+stockname[1:],datex[zero_ndx[-1]]), dpi=100)
-					# plt.clf()	
-					goldstock = '{0:8}- {1} {2}({3})'.format(RuleFolder[4:],stockid[2:],stockname.encode('utf-8'),GetIndustry(stockid[2:]).encode('utf-8'))
-					category.append(RuleFolder[4:])
-					Result.append((goldstock,AMA[-1]))
-			logging.warning('Complete %4s: %4s - %s, Elapsed Time: %s %s'%(num, stockname, stockid, temp-start, '@'.join(category)))
-		except Exception as e:
-			logging.warning('Error '+str(e)+' when grabing stock:' + str(id))
-	return Result, folder
+def GoldSeeker(_id, _fromDate, _toDate, _num, _figure = False):
+	global logger	
+	Result = ()
+	try:
+		stockname, stockid = StockQuery(_id)
+		items = GrabStock(stockid, _fromDate, _toDate)	
+		datex = GetColumn(items, 5)
+		if not CheckDate(datex[-1]):
+			logger.warning('Suspension%4s:%4s:%s'%(_num, stockname+(4-len(stockname))*'  ', stockid))
+			return ()
+		HfqPrice = GrabHFQPrice(_id)			
+		length = len(items)
+		idx = xrange(length)
+		emp = ['']*length
+		Open = GetColumn(items, 0)			
+		Close = GetColumn(items, 1)
+		HfqClose = map(lambda d: float(HfqPrice[d]), datex)
+		[DDD, AMA, DMA] = CalcDMA(HfqClose)		
+		zero_ndx = FindZero(DMA)
+		# zero_pts = GetPart(zero_ndx, DMA)			
+		
+		High = GetColumn(items, 2)
+		Low = GetColumn(items, 3)
+		Volumes = GetColumn(items, 4)
+		Cross = RuleGoldCross(DDD, AMA, zero_ndx[-3:], idx[-1], datex[-1])
+		Kiss = RuleGoldKiss(DDD, AMA, zero_ndx[-1], HfqClose, idx[-1], datex[-1])		
+		GoldBar = RuleGoldBar(HfqClose, Volumes, datex[-1])
+		DbleQuty = RuleDoubleQuantity(HfqClose, Volumes, datex[-1])
+		Twine = RuleGoldTwine(DDD, AMA, HfqClose, datex[-1])
+		MultiArr = RuleMultiArrange(HfqClose, datex[-1])
+		category = ['']
+		for ndx,item in enumerate([Cross, Kiss, GoldBar, DbleQuty, Twine, MultiArr]):
+			if item:
+				RuleFolder = RuleFolders[ndx]
+				if _figure:
+					GenerateFigure(Open, Close, items)
+				goldstock = '{0:8}- {1} {2}({3})'.format(RuleFolder[4:],stockid[2:],stockname.encode('utf-8'),GetIndustry(stockid[2:]).encode('utf-8'))
+				category.append(RuleFolder[4:])
+				Result = (goldstock,AMA[-1])
+		logger.warning('Complete%6s:%4s:%s %s'%(_num, stockname+(4-len(stockname))*'  ', stockid, '@'.join(category)))
+	except Exception as e:
+		logger.error('Error: %s\n%s'%(e, traceback.format_exc()))
+	return Result
 
 def SortList(_tupleList):
 	OrderedResult = sorted(_tupleList, key=itemgetter(1))
@@ -514,20 +512,53 @@ def PushStocks(_stockList, _targets):
 				# PushwithPb(toPush,folder)
 			elif target['type'] == 'D':
 				toPush = [item for item in _stockList if item[0]=='D']
-				print toPush
 			elif target['type'] == 'm':
 				toPush = [item for item in _stockList if item[1]=='m']
 			else:
 				toPush = [':( Sorry. Keep you money in your pocket safely. No stocks to push today.'] 		
 			PushwithMail(toPush, target['mail'])
 			# PushwithFetion(toPush, target['phone'])
-			time.sleep(2)			
+			time.sleep(2)
+	pass
 
+def ClassifyStocks(stocks):
+	SHstocks = [item for item in stocks if item[0]=='6']
+	SZstocks = [item for item in stocks if item[0]=='0']
+	CYstocks = [item for item in stocks if item[0]=='3']
+	StockField = [StockType.SH, StockType.SZ, StockType.CY]
+	return dict(zip(StockField, [SHstocks, SZstocks, CYstocks]))
+
+def AsyncGrab( stocks ):
+	result = []
+	pool = multiprocessing.Pool(processes = 4)
+	for ndx,stock in enumerate(stocks):
+		result.append(pool.apply_async(GoldSeeker, (stock, fromDate, toDate, ndx,)))
+	pool.close()
+	pool.join()
+	return [res.get() for res in result if res.get()]
+
+def MapGrab( stocks ):
+	def GoldSeekerWrapper(zipitems):
+		return GoldSeeker(*zipitems)
+	pool = multiprocessing.Pool(processes = 4)
+	indices = xrange(1, len(stocks))
+	result = pool.map(GoldSeekerWrapper, itertools.izip(stocks, itertools.repeat(fromDate), itertools.repeat(toDate), indices))
+	pool.close()
+	pool.join()
+	return [res for res in result if res]
+
+logTime = datetime.now().strftime('%Y%m%d_%H%M')
+logFile = 'StockData_%s.log'%logTime
+logDir = os.path.join(BaseDir(), "Logs")
+logger = logging.getLogger('spider_stock')
+logger = SetLogger(logger, logDir, logFile)	
+	
 if __name__ == '__main__':
+	baseFolder, folder = CreateFolder()
 	stocks = GetStockList()
-	begin = '20140801'
-	end = date.today().strftime('%Y%m%d')
-	result, folder = GoldSeeker(stocks, begin, end)
-	OrderedResult = SortList(result)	
-	# PushStocks(OrderedResult, Targets)
-
+	if len(sys.argv) > 1 and sys.argv[1] in [StockType.SH, StockType.SZ, StockType.CY]:
+		classified = ClassifyStocks(stocks)
+		stocks = classified[sys.argv[1]]
+	finalResults = AsyncGrab(stocks)
+	OrderedResult = SortList(finalResults)
+	PushStocks(OrderedResult, Targets)
