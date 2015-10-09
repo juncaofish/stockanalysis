@@ -46,7 +46,7 @@ class FigureConf():
 	EXP2clr = '#3300CC'
 	
 def GetIndustry(_stockid):
-	data =  pd.read_csv(os.path.join(BaseDir(), r'data\all.csv'), dtype={'code':'object'}, encoding='GBK')
+	data =  pd.read_csv(os.path.join(BaseDir(), r'data/all.csv'), dtype={'code':'object'}, encoding='GBK')
 	industry = data.ix[data.code==_stockid,['industry']].values[0][0]
 	return industry
 
@@ -495,7 +495,7 @@ def GoldSeeker(_id, _fromDate, _toDate, _num, _figure = False):
 				Result = (goldstock,AMA[-1])
 		logger.warning('Complete%6s:%4s:%s %s'%(_num, stockname+(4-len(stockname))*'  ', stockid, '@'.join(category)))
 	except Exception as e:
-		logger.error('Error: %s\n%s'%(e, traceback.format_exc()))
+		logger.error('Error: %s\n'%(e)) # traceback.format_exc()
 	return Result
 
 def SortList(_tupleList):
@@ -530,7 +530,7 @@ def ClassifyStocks(stocks):
 
 def AsyncGrab( stocks ):
 	result = []
-	pool = multiprocessing.Pool(processes = 4)
+	pool = multiprocessing.Pool(processes = 3)
 	for ndx,stock in enumerate(stocks):
 		result.append(pool.apply_async(GoldSeeker, (stock, fromDate, toDate, ndx,)))
 	pool.close()
@@ -540,7 +540,7 @@ def AsyncGrab( stocks ):
 def MapGrab( stocks ):
 	def GoldSeekerWrapper(zipitems):
 		return GoldSeeker(*zipitems)
-	pool = multiprocessing.Pool(processes = 4)
+	pool = multiprocessing.Pool(processes = 3)
 	indices = xrange(1, len(stocks))
 	result = pool.map(GoldSeekerWrapper, itertools.izip(stocks, itertools.repeat(fromDate), itertools.repeat(toDate), indices))
 	pool.close()
