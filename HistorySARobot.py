@@ -25,7 +25,7 @@ def AnalyInPeriod(stockid, items):
 	try:		
 		datex = GetColumn(items, 5)		
 		MACluster = CalcMA(items)		
-		[DDD, AMA, DMA] = CalcDMA(items)		
+		[DDD, AMA, DMA] = calc_DMA(items)		
 		zero_ndx = FindZero(DMA)
 		zero_pts = GetPart(zero_ndx, DMA)
 		length = len(items)
