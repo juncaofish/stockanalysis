@@ -12,7 +12,6 @@ class StockType:
 
 
 class StockInfo(object):
-
     def __init__(self, path='data/data.json'):
         with open(path) as f:
             self.stock = json.load(f)
@@ -29,7 +28,8 @@ class StockInfo(object):
     def get_stock_name(self, stock_code):
         return self.stock.get(stock_code)
 
-    def get_stock_with_prefix(self, stock_code):
+    @staticmethod
+    def get_stock_with_prefix(stock_code):
         prefix = StockType.SH if stock_code.startswith('6') else StockType.SZ
         return prefix + stock_code
 
@@ -47,7 +47,8 @@ def main():
     stock_info = StockInfo()
     assert stock_info.get_stock_with_prefix('002440') == "SZ002440"
     assert stock_info.get_stock_name('002440').encode("utf-8") == "闰土股份"
-    assert stock_info.get_stock_industry('002440') == "染料涂料"
+    assert stock_info.get_stock_industry('002440').encode("utf-8") == "染料涂料"
+
 
 if __name__ == '__main__':
     main()

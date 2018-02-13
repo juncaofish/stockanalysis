@@ -56,4 +56,7 @@ target/
 backup.py
 UnitTestMain.py
 
+.idea/*
 .vscode/
+logs/
+daily/
