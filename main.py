@@ -75,10 +75,12 @@ def gold_seeker(stock_code, index):
             for i, item in enumerate([cross, kiss, twine, multi_range]):
                 if item:
                     rule_name = RULE_DIRS[i]
-                    gold_info = '{0:8}- {1} {2}({3})'.format(rule_name[4:], stock_code, stock_name.encode('utf-8'),
-                                                             stock_info.get_stock_industry(stock_code).encode('utf-8'))
                     category.append(rule_name[4:])
-                    golds_stocks = (gold_info, ama[-1])
+	    if any([cross, kiss, twine, multi_range]):
+                rule = '@'.join(category)
+		gold_info = '{0:8}- {1} {2}({3})'.format(rule, stock_code, stock_name.encode('utf-8'),
+                                                             stock_info.get_stock_industry(stock_code).encode('utf-8'))
+                golds_stocks = (gold_info, ama[-1])
             logger.warning(
                 'Complete%6s:%4s:%s %s' % (index, stock_name + (4 - len(stock_name)) * '  ',
                                            stock_code, '@'.join(category)))
@@ -106,9 +108,11 @@ def push_notifier(gold_stocks, push_targets):
             if target['type'] == 'A':
                 candidates = gold_stocks
             elif target['type'] == 'D':
-                candidates = [item for item in gold_stocks if item[0] == 'D']
+                candidates = [item for item in gold_stocks if item[1] == 'D']
             elif target['type'] == 'm':
-                candidates = [item for item in gold_stocks if item[1] == 'm']
+                candidates = [item for item in gold_stocks if item[2] == 'm']
+            elif target['type'] == 'P':
+                candidates = [item for item in gold_stocks if item[1] != 'T']
             else:
                 candidates = [':( Sorry. Keep you money in your pocket safely. No stocks to push today.']
             push_to_mailbox(candidates, target['mail'])
