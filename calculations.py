@@ -20,7 +20,7 @@ def calc_expma(sequence, period):
         return inner_sequence[0] if n == 0 else \
             (inner_sequence[n] * 2.0 + (N - 1.0) * ExpMA(inner_sequence, n - 1, N)) / (N + 1.0)
 
-    expma = [ExpMA(sequence, i, period) for i in xrange(length)]
+    expma = [ExpMA(sequence, i, period) for i in range(length)]
     return expma
 
 
@@ -46,7 +46,7 @@ def calc_dma(close_prices, short=5, far=89, middle=34):
     return ddd, ama, dma
 
 
-def calc_boll(Close, N=89, k=2):
+def calc_boll(close_prices, N=89, k=2):
     """
     # Bollinger Bands consist of:
     # an N-period moving average (MA)
@@ -55,20 +55,20 @@ def calc_boll(Close, N=89, k=2):
     # %b = (last − lowerBB) / (upperBB − lowerBB)
     # Bandwidth tells how wide the Bollinger Bands are on a normalized basis. Writing the same symbols as before, and middleBB for the moving average, or middle Bollinger Band:
     # Bandwidth = (upperBB − lowerBB) / middleBB
-    :param Close:
+    :param close_prices:
     :param N:
     :param k:
     :return:
     """
 
-    length = len(Close)
-    MA = fast_moving_average(Close, N).tolist()
+    length = len(close_prices)
+    MA = fast_moving_average(close_prices, N).tolist()
     # MA = calc_expma(Close, N)
-    SM = map(lambda x, y: (x - y) ** 2, Close, MA)
+    SM = map(lambda x, y: (x - y) ** 2, close_prices, MA)
     MD = [(sum(SM[i - N + 1:i + 1] if i >= N - 1 else (SM[0:i] + [SM[i]] * (N - i))) / float(N)) ** 0.5 for i in
-          xrange(length)]
+          range(length)]
     UP = map(lambda x, y: x + y * k, MA, MD)
     DN = map(lambda x, y: x - y * k, MA, MD)
-    b = map(lambda x, y, z: (x - z) / (float(y - z) if y != z else 1.0), Close, UP, DN)
+    b = map(lambda x, y, z: (x - z) / (float(y - z) if y != z else 1.0), close_prices, UP, DN)
     Band = map(lambda x, y, z: (x - z) / (float(y) if y != 0 else 1.0), UP, MD, DN)
     return MA, UP, DN, b, Band

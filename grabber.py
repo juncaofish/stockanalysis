@@ -4,8 +4,12 @@ import json
 import re
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from settings import Headers, HFQ_URL, TIMEOUT_SEC
+
+s = requests.Session()
+s.mount('http://', HTTPAdapter(max_retries=3))
 
 
 def grab_stock_rt(_stockid):
@@ -21,7 +25,7 @@ def grab_stock_rt(_stockid):
 def grab_hfq_price(stock_code):
     payload = {'symbol': stock_code, 'type': 'hfq'}
     try:
-        r = requests.get(HFQ_URL, headers=Headers, params=payload, timeout=TIMEOUT_SEC)
+        r = s.get(HFQ_URL, headers=Headers, params=payload, timeout=TIMEOUT_SEC)
         text = r.text[1:-1]
         text = text.replace('{_', '{"').replace('total', '"total"').replace('data', '"data"') \
             .replace(':"', '":"').replace('",_', '","').replace('_', '-')
@@ -29,3 +33,7 @@ def grab_hfq_price(stock_code):
         return json_data['data']
     except requests.exceptions.Timeout:
         return None
+
+
+if __name__ == '__main__':
+    print(grab_hfq_price(300073))

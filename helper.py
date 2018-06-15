@@ -1,7 +1,12 @@
-# -*- coding=utf-8 -*-
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
 import logging
 from datetime import datetime, date, timedelta
-import os
+import os, sys
 from logging.handlers import TimedRotatingFileHandler
 
 from settings import RULE_DIRS, TIMESTAMP_FMT
@@ -28,29 +33,40 @@ def create_dir():
     return dir_path, folder
 
 
-def push_to_mailbox(_msglist, _sendto):
+def push_to_mailbox(msglist, recipients):
     import smtplib
-    from email.MIMEText import MIMEText
-    from email.Utils import formatdate
-    from email.Header import Header
-    smtpHost = 'smtp.sina.cn'
-    fromMail = username = 'nuggetstock@sina.com'
+    if sys.version_info.major == 3:
+        from email.mime.text import MIMEText
+        from email.utils import format_datetime as formatdate
+        from email.header import Header
+    else:
+        from email.MIMEText import MIMEText
+        from email.Utils import formatdate
+        from email.Header import Header
+    smtp_host = 'smtp.sina.cn'
+    from_mail = username = 'nuggetstock@sina.com'
     password = 'welcome'
     subject = u'[%s] 自动推荐' % datetime.today().strftime('%Y/%m/%d')
-    body = '\n'.join(_msglist)
+    body = '\n'.join(msglist)
     mail = MIMEText(body, 'plain', 'utf-8')
-    mail['Subject'] = Header(subject, 'utf-8')
-    mail['From'] = fromMail
-    mail['To'] = _sendto
-    mail['Date'] = formatdate()
+    if sys.version_info.major == 3:
+        mail['subject'] = Header(subject, 'utf-8')
+        mail['from'] = from_mail
+        mail['to'] = recipients
+        mail['date'] = formatdate(datetime.now())
+    else:
+        mail['Subject'] = Header(subject, 'utf-8')
+        mail['From'] = from_mail
+        mail['To'] = recipients
+        mail['Date'] = formatdate()
     try:
-        smtp = smtplib.SMTP_SSL(smtpHost)
+        smtp = smtplib.SMTP_SSL(smtp_host)
         smtp.ehlo()
         smtp.login(username, password)
-        smtp.sendmail(fromMail, _sendto, mail.as_string())
+        smtp.sendmail(from_mail, recipients, mail.as_string())
         smtp.close()
     except Exception as e:
-        print(str(e))
+        logger.error(str(e))
 
 
 def is_stock_available(data):

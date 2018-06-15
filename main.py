@@ -17,7 +17,6 @@ from rules import rule_gold_cross, rule_gold_kiss, rule_gold_twine, rule_multi_a
 from settings import TIMESTAMP_FMT, INTERVAL, RULE_DIRS
 from stocks import StockInfo
 
-
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 stock_info = StockInfo()
 log_file = 'StockBot_%s.log' % datetime.now().strftime('%Y%m%d_%H%M')
@@ -28,23 +27,28 @@ logger = set_logger(logger, log_dir, log_file)
 
 
 def transform(data):
-    if not data:
-        return np.array([])
-
-    today = datetime.today()
-    cnt = 0
     prices = []
+    cnt = 0
     day = 0
-    while cnt < min(INTERVAL, len(data.keys())):
-        if not is_stock_available(data):
-            # 停牌
-            break
-        current = datetime.strftime(today - timedelta(days=day), TIMESTAMP_FMT)
-        close_price = data.get(current)
-        if close_price:
-            cnt += 1
-            prices.append(float(close_price))
-        day += 1
+    today = datetime.today()
+    if isinstance(data, list):
+        return np.array([])
+    elif isinstance(data, dict):
+        data_length = len(data.keys())
+        if not data_length:
+            return np.array([])
+        if not is_stock_available(data): # 停牌
+            return np.array([])
+        while cnt < min(INTERVAL, data_length):
+            # 取历史价格直到当前价格，长度INTERVAL，数据长度不足时，返回所有数据
+            current = datetime.strftime(today - timedelta(days=day), TIMESTAMP_FMT)
+            close_price = data.get(current)
+            if close_price:
+                cnt += 1
+                prices.append(float(close_price))
+            day += 1
+        if np.sum(np.diff(prices[:4])) == 0:
+            return np.array([])
     return np.array(prices[::-1])
 
 
@@ -63,8 +67,8 @@ def gold_seeker(stock_code, index):
             [ddd, ama, dma] = calc_dma(hfq_close)
             zero_position = detect_zero_points(dma)
             if zero_position.shape[0] < 3:
-                logger.warning(
-                    'Newstock(<89d) %4s:%4s:%s' % (index, stock_name + (4 - len(stock_name)) * '  ', stock_code))
+                logger.warning('No cross in recent 89 days%4s:%4s:%s'
+                    % (index, stock_name + (4 - len(stock_name)) * '  ', stock_code))
                 return ()
 
             cross = rule_gold_cross(ddd, ama, zero_position[-3:])
@@ -76,10 +80,10 @@ def gold_seeker(stock_code, index):
                 if item:
                     rule_name = RULE_DIRS[i]
                     category.append(rule_name[4:])
-	    if any([cross, kiss, twine, multi_range]):
+            if any([cross, kiss, twine, multi_range]):
                 rule = '@'.join(category)
-		gold_info = '{0:8}- {1} {2}({3})'.format(rule, stock_code, stock_name.encode('utf-8'),
-                                                             stock_info.get_stock_industry(stock_code).encode('utf-8'))
+                gold_info = '{0:8}- {1} {2}({3})'.format(rule, stock_code, stock_name.encode('utf-8'),
+                                                         stock_info.get_stock_industry(stock_code).encode('utf-8'))
                 golds_stocks = (gold_info, ama[-1])
             logger.warning(
                 'Complete%6s:%4s:%s %s' % (index, stock_name + (4 - len(stock_name)) * '  ',
@@ -103,20 +107,19 @@ def sort_by_ama(tuple_result):
 
 
 def push_notifier(gold_stocks, push_targets):
-    if gold_stocks:
-        for target in push_targets:
-            if target['type'] == 'A':
-                candidates = gold_stocks
-            elif target['type'] == 'D':
-                candidates = [item for item in gold_stocks if item[1] == 'D']
-            elif target['type'] == 'm':
-                candidates = [item for item in gold_stocks if item[2] == 'm']
-            elif target['type'] == 'P':
-                candidates = [item for item in gold_stocks if item[1] != 'T']
-            else:
-                candidates = [':( Sorry. Keep you money in your pocket safely. No stocks to push today.']
-            push_to_mailbox(candidates, target['mail'])
-            time.sleep(2)
+    for target in push_targets:
+        if target['type'] == 'A':
+            candidates = gold_stocks
+        elif target['type'] == 'D':
+            candidates = [item for item in gold_stocks if item[1] == 'D']
+        elif target['type'] == 'm':
+            candidates = [item for item in gold_stocks if item[2] == 'm']
+        elif target['type'] == 'P':
+            candidates = [item for item in gold_stocks if item[1] != 'T']
+        if not candidates:
+            candidates = [':( Keep you money in your pocket safely. No stocks to recommend today.']
+        push_to_mailbox(candidates, target['mail'])
+        time.sleep(2)
 
 
 def multi_process_analyze(stock_list):

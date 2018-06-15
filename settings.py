@@ -1,5 +1,9 @@
-#! /usr/bin/env python
-# -*- encoding: utf-8 -*-
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
 
 RULE_DIRS = [u'RuleDmacrs', u'RuleDmakis', u'RuleTwine', u'RuleMultiArr']
 Headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.104 Safari/537.36'}
