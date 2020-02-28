@@ -1,6 +1,10 @@
-#! /usr/bin/env python
-# -*- encoding: utf-8 -*-
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
 
+import codecs
 import json
 import pandas as pd
 
@@ -13,7 +17,7 @@ class StockType:
 
 class StockInfo(object):
     def __init__(self, path='data/data.json'):
-        with open(path) as f:
+        with codecs.open(path, encoding="utf8") as f:
             self.stock = json.load(f)
         self.industry_info = pd.read_csv('data/all.csv',
                                          dtype={'code': 'object'},
