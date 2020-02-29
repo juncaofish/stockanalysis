@@ -18,7 +18,7 @@ class StockType:
 class StockInfo(object):
     def __init__(self, path='data/data.json'):
         with codecs.open(path, encoding="utf8") as f:
-            self.stock = json.load(f)
+            self.stock = {item['code']: item['name'] for item in json.load(f)}
         self.industry_info = pd.read_csv('data/all.csv',
                                          dtype={'code': 'object'},
                                          encoding='GBK')
@@ -39,7 +39,7 @@ class StockInfo(object):
 
     def get_stock_industry(self, stock_code):
         try:
-            industry = self.industry_info.ix[
+            industry = self.industry_info.loc[
                 self.industry_info.code == stock_code,
                 ['industry']].values[0][0]
         except Exception:

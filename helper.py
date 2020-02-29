@@ -46,7 +46,7 @@ def push_to_mailbox(msglist, recipients):
     smtp_host = 'smtp.sina.cn'
     from_mail = username = 'nuggetstock@sina.com'
     password = 'welcome'
-    subject = u'[%s] 自动推荐' % datetime.today().strftime('%Y/%m/%d')
+    subject = '[%s] 自动推荐' % datetime.today().strftime('%Y/%m/%d')
     body = '\n'.join(msglist)
     mail = MIMEText(body, 'plain', 'utf-8')
     if sys.version_info.major == 3:

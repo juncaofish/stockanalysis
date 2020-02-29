@@ -82,8 +82,8 @@ def gold_seeker(stock_code, index):
                     category.append(rule_name[4:])
             if any([cross, kiss, twine, multi_range]):
                 rule = '@'.join(category)
-                gold_info = '{0:8}- {1} {2}({3})'.format(rule, stock_code, stock_name.encode('utf-8'),
-                                                         stock_info.get_stock_industry(stock_code).encode('utf-8'))
+                gold_info = '{0:8}- {1} {2}({3})'.format(rule, stock_code, stock_name,
+                                                         stock_info.get_stock_industry(stock_code))
                 golds_stocks = (gold_info, ama[-1])
             logger.warning(
                 'Complete%6s:%4s:%s %s' % (index, stock_name + (4 - len(stock_name)) * '  ',
