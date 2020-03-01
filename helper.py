@@ -77,7 +77,7 @@ def set_logger(logger_in, directory, logfile):
     if not os.path.exists(directory):
         os.makedirs(directory)
     log_file_name = os.path.join(directory, logfile)
-    log_handler = TimedRotatingFileHandler(log_file_name, when="midnight")
+    log_handler = TimedRotatingFileHandler(log_file_name, when="midnight", encoding='utf8')
     log_handler.suffix = "%Y%m%d_%H%M%S.log"
     log_formatter = logging.Formatter('%(asctime)-12s:%(message)s')
     log_handler.setFormatter(log_formatter)
