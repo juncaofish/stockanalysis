@@ -43,7 +43,7 @@ class StockInfo(object):
                 self.industry_info.code == stock_code,
                 ['industry']].values[0][0]
         except Exception:
-            industry = "NoData"
+            industry = "缺失"
         return industry
 
 

@@ -7,6 +7,7 @@ import requests
 from requests.adapters import HTTPAdapter
 
 from settings import Headers, HFQ_URL, TIMEOUT_SEC
+from helper import yesterday, today
 
 s = requests.Session()
 s.mount('http://', HTTPAdapter(max_retries=3))
@@ -19,7 +20,8 @@ def grab_stock_rt(_stockid):
     m = regex.search(r.text)
     info = m.group(0)
     info = info.split(',')
-    return [eval(info[1]), eval(info[3]), eval(info[4]), eval(info[5]), eval(info[8]) / 100, info[30]]
+    return [eval(info[1]), eval(info[3]), eval(info[4]), eval(info[5]), eval(info[8]) / 100,
+            info[30]]
 
 
 def grab_hfq_price(stock_code):
@@ -35,5 +37,23 @@ def grab_hfq_price(stock_code):
         return None
 
 
+def dapan(code='sh000001'):
+    url = 'http://web.ifzq.gtimg.cn/appstock/app/fqkline/get'
+    payload = {'param': '{code},day,{start},{end},2,hfq'.format(code=code,
+                                                                start=yesterday,
+                                                                end=today)}
+    try:
+        r = s.get(url, headers=Headers, params=payload, timeout=TIMEOUT_SEC)
+        result = r.json()
+        data = result['data'][code]['day']
+        close = eval(data[-1][2])
+        pre_close = eval(data[0][2])
+        percent = (close - pre_close) / pre_close
+        code_data = {'code': code, 'close': close, 'percent': percent}
+        return code_data
+    except requests.exceptions.Timeout:
+        return None
+
+
 if __name__ == '__main__':
-    print(grab_hfq_price(300073))
+    print(dapan())

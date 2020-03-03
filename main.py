@@ -5,13 +5,12 @@ import os
 import time
 import traceback
 from datetime import datetime, timedelta
-from operator import itemgetter
 
 import numpy as np
 
 from calculations import detect_zero_points, calc_dma
 from grabber import grab_hfq_price
-from helper import push_to_mailbox, set_logger, is_stock_available
+from helper import push_to_mailbox, set_logger, stock_alive
 from namelist import mails
 from rules import rule_gold_cross, rule_gold_kiss, rule_gold_twine, rule_multi_average
 from settings import TIMESTAMP_FMT, INTERVAL, RULE_DIRS
@@ -37,7 +36,7 @@ def transform(data):
         data_length = len(data.keys())
         if not data_length:
             return np.array([])
-        if not is_stock_available(data): # 停牌
+        if not stock_alive(data): # 停牌
             return np.array([])
         while cnt < min(INTERVAL, data_length):
             # 取历史价格直到当前价格，长度INTERVAL，数据长度不足时，返回所有数据
@@ -82,49 +81,49 @@ def gold_seeker(stock_code, index):
                     category.append(rule_name[4:])
             if any([cross, kiss, twine, multi_range]):
                 rule = '@'.join(category)
-                gold_info = '{0:8}- {1} {2}({3})'.format(rule, stock_code, stock_name,
-                                                         stock_info.get_stock_industry(stock_code))
-                golds_stocks = (gold_info, ama[-1])
-            logger.warning(
+                golds_stocks = {'rule': rule,
+                                'code': stock_code,
+                                'name': stock_name,
+                                'field': stock_info.get_stock_industry(stock_code),
+                                'ama': ama[-1],
+                                'positive': hfq_close[-1] > hfq_close[-2]}
+            logger.info(
                 'Complete%6s:%4s:%s %s' % (index, stock_name + (4 - len(stock_name)) * '  ',
                                            stock_code, '@'.join(category)))
         else:
             # Check if stock is on suspension.
-            logger.warning('Suspension%4s:%4s:%s' % (index, stock_name + (4 - len(stock_name)) * '  ', stock_code))
+            logger.warning('Suspension%4s:%4s:%s' % (index,
+                                                     stock_name + (4 - len(stock_name)) * '  ',
+                                                     stock_code))
             return ()
     except Exception as e:
-        logger.error('Error: %s when processing %s..' % (e, stock_code))  #
+        logger.error('Error: {} when processing {}..' .format(e, stock_code))
         print(traceback.format_exc())
 
     return golds_stocks
 
 
-def sort_by_ama(tuple_result):
-    ordered_result = sorted(tuple_result, key=itemgetter(1))
-    reordered_result = map(itemgetter(0), ordered_result)
-    ordered_result = sorted(reordered_result, key=lambda x: x[0:4])
-    return ordered_result
-
-
-def push_notifier(gold_stocks, push_targets):
+def notify(gold_stocks, push_targets):
     for target in push_targets:
         if target['type'] == 'A':
             candidates = gold_stocks
         elif target['type'] == 'D':
-            candidates = [item for item in gold_stocks if item[1] == 'D']
+            candidates = [item for item in gold_stocks if item['rule'].startswith('D')]
         elif target['type'] == 'm':
-            candidates = [item for item in gold_stocks if item[2] == 'm']
+            candidates = [item for item in gold_stocks if item['rule'].startswith('n')]
         elif target['type'] == 'P':
-            candidates = [item for item in gold_stocks if item[1] != 'T']
-        if not candidates:
-            candidates = [':( Keep you money in your pocket safely. No stocks to recommend today.']
-        push_to_mailbox(candidates, target['mail'])
+            candidates = [item for item in gold_stocks if item['rule'].startswith('T')]
+        else:
+            candidates = []
+        success = push_to_mailbox(candidates, target['mail'])
+        if success:
+            logger.info("Push to {id} successfully.".format(id=target['id']))
         time.sleep(2)
 
 
-def multi_process_analyze(stock_list):
+def analyze(stock_list):
     result = []
-    pool = multiprocessing.Pool(processes=4)
+    pool = multiprocessing.Pool(processes=5)
     for index, stock in enumerate(stock_list):
         result.append(pool.apply_async(gold_seeker, (stock, index,)))
     pool.close()
@@ -133,7 +132,14 @@ def multi_process_analyze(stock_list):
 
 
 if __name__ == '__main__':
+    # fetch stock list
     stocks = stock_info.get_stocks()
-    results = multi_process_analyze(stocks)
-    resort_results = sort_by_ama(results)
-    push_notifier(resort_results, mails)
+
+    # run multiple process analyze
+    candidate_stocks = analyze(list(stocks)[:10])
+
+    # resort candidates
+    sorted_stocks = sorted(candidate_stocks, key=lambda x: (x['rule'], x['ama']))
+
+    # send email
+    notify(sorted_stocks, mails)
