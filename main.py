@@ -108,11 +108,11 @@ def notify(gold_stocks, push_targets):
         if target['type'] == 'A':
             candidates = gold_stocks
         elif target['type'] == 'D':
-            candidates = [item for item in gold_stocks if item['rule'].startswith('D')]
+            candidates = [item for item in gold_stocks if item['rule'].startswith('@D')]
         elif target['type'] == 'm':
-            candidates = [item for item in gold_stocks if item['rule'].startswith('n')]
+            candidates = [item for item in gold_stocks if item['rule'].startswith('@n')]
         elif target['type'] == 'P':
-            candidates = [item for item in gold_stocks if item['rule'].startswith('T')]
+            candidates = [item for item in gold_stocks if item['rule'].startswith('@T')]
         else:
             candidates = []
         success = push_to_mailbox(candidates, target['mail'])
@@ -136,7 +136,7 @@ if __name__ == '__main__':
     stocks = stock_info.get_stocks()
 
     # run multiple process analyze
-    candidate_stocks = analyze(list(stocks)[:10])
+    candidate_stocks = analyze(stocks)
 
     # resort candidates
     sorted_stocks = sorted(candidate_stocks, key=lambda x: (x['rule'], x['ama']))

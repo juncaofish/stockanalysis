@@ -53,7 +53,7 @@ def generate_header():
             header='深证指数：{:.2%} （{}）'.format(
                 sz['percent'], sz['close']
             ))
-        template = '<h2>{}  {}</h2><br>' \
+        template = '<h2>{}</h2><h2>{}</h2><br>' \
                    '<hr style="height:1px;border:none;border-top:1px dashed #0066CC;" />'
         return template.format(sh_header, sz_header)
     except Exception:
@@ -62,14 +62,18 @@ def generate_header():
 
 def generate_body(push_items):
     lines = [generate_header()]
-    if push_items:
-        template = '<font color="{color}" size="5">{code}</font>' \
-                   '<font color="black" size="4"> - {name}</font>' \
-                   '<font color="black" size="4"> - ({field})</font>' \
-                   '<font color="black" size="4"> - {rule}</font>'
+    items_cnt = len(push_items)
+    if items_cnt > 0:
+        push_items = push_items[:15]
+        template = '<font face="arial" color="black" size="5"><b>{code}</b></font>' \
+                   '<font size="4" color="{color}"> - {name}</font>' \
+                   '<font color="gray" size="3"> - ({field})</font>' \
+                   '<font color="gray" size="2"> - {rule}</font>'
         for item in push_items:
             item['color'] = color[1 - item['positive']]
             lines.append(template.format(**item))
+        if items_cnt > 15:
+            lines.append('<font color="gray" size="2">...</font>')
     else:
         body = '<font color="#424242" size="4">' \
                ':( Keep money in your pocket safely. No stocks to recommend today.' \
