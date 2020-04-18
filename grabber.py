@@ -28,11 +28,7 @@ def grab_hfq_price(stock_code):
     payload = {'symbol': stock_code, 'type': 'hfq'}
     try:
         r = s.get(HFQ_URL, headers=Headers, params=payload, timeout=TIMEOUT_SEC)
-        text = r.text[1:-1]
-        text = text.replace('{_', '{"').replace('total', '"total"').replace('data', '"data"') \
-            .replace(':"', '":"').replace('",_', '","').replace('_', '-')
-        json_data = json.loads(text, encoding='utf-8')
-        return json_data['data']
+        return r.json()['data']
     except requests.exceptions.Timeout:
         return None
 

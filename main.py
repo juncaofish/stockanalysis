@@ -33,7 +33,7 @@ def transform(data):
     if isinstance(data, list):
         return np.array([])
     elif isinstance(data, dict):
-        data_length = len(data.keys())
+        data_length = len(data)
         if not data_length:
             return np.array([])
         if not stock_alive(data): # 停牌
@@ -41,6 +41,7 @@ def transform(data):
         while cnt < min(INTERVAL, data_length):
             # 取历史价格直到当前价格，长度INTERVAL，数据长度不足时，返回所有数据
             current = datetime.strftime(today - timedelta(days=day), TIMESTAMP_FMT)
+            current = "_" + current.replace("-", "_")
             close_price = data.get(current)
             if close_price:
                 cnt += 1
